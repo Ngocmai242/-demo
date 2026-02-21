@@ -417,10 +417,46 @@
                         <input type="text" id="manual-image" placeholder="Image URL" style="padding: 8px;">
                         <input type="text" id="manual-link" placeholder="Shopee/Shop Link" style="padding: 8px;">
                         <select id="manual-category" style="padding: 8px;">
-                            <option value="top">Top (Áo)</option>
-                            <option value="bottom">Bottom (Quần/Váy)</option>
-                            <option value="dress">Dress (Đầm)</option>
-                            <option value="accessory">Accessory (Phụ kiện)</option>
+                            <option value="">Select Category...</option>
+                            <optgroup label="Tops (Áo)">
+                                <option value="Tops|T-shirt">T-shirt</option>
+                                <option value="Tops|Shirt">Shirt</option>
+                                <option value="Tops|Polo">Polo</option>
+                                <option value="Tops|Hoodie">Hoodie</option>
+                                <option value="Tops|Sweater">Sweater</option>
+                                <option value="Tops|Blazer">Blazer</option>
+                                <option value="Tops|Jacket">Jacket</option>
+                                <option value="Tops|Crop top">Crop top</option>
+                                <option value="Tops|Tank top">Tank top</option>
+                            </optgroup>
+                            <optgroup label="Bottoms (Quần/Váy)">
+                                <option value="Bottoms|Jeans">Jeans</option>
+                                <option value="Bottoms|Trousers">Trousers</option>
+                                <option value="Bottoms|Jogger">Jogger</option>
+                                <option value="Bottoms|Shorts">Shorts</option>
+                                <option value="Bottoms|Skirt">Skirt (Chân váy)</option>
+                                <option value="Bottoms|Leggings">Leggings</option>
+                            </optgroup>
+                            <optgroup label="One-piece (Đồ nguyên bộ)">
+                                <option value="One-piece|Dress">Dress (Đầm)</option>
+                                <option value="One-piece|Jumpsuit">Jumpsuit</option>
+                                <option value="One-piece|Set đồ">Set (Bộ đồ)</option>
+                            </optgroup>
+                            <optgroup label="Shoes (Giày/Dép)">
+                                <option value="Shoes|Sneaker">Sneaker</option>
+                                <option value="Shoes|High heels">High heels</option>
+                                <option value="Shoes|Boots">Boots</option>
+                                <option value="Shoes|Sandals">Sandals</option>
+                                <option value="Shoes|Loafers">Loafers</option>
+                            </optgroup>
+                            <optgroup label="Accessories (Phụ kiện)">
+                                <option value="Accessories|Bag">Bag</option>
+                                <option value="Accessories|Belt">Belt</option>
+                                <option value="Accessories|Hat">Hat</option>
+                                <option value="Accessories|Glasses">Glasses</option>
+                                <option value="Accessories|Necklace">Necklace</option>
+                                <option value="Accessories|Jewelry">Jewelry</option>
+                            </optgroup>
                         </select>
                         <select id="manual-style" style="padding: 8px;">
                             <option value="Casual">Casual</option>
@@ -428,6 +464,10 @@
                             <option value="Party">Party</option>
                             <option value="Streetwear">Streetwear</option>
                             <option value="Vintage">Vintage</option>
+                            <option value="Minimal">Minimal</option>
+                            <option value="Sporty">Sporty</option>
+                            <option value="Elegant">Elegant</option>
+                            <option value="Y2K">Y2K</option>
                         </select>
                     </div>
                     <button class="btn btn-primary" onclick="addManualProduct()"
@@ -436,25 +476,25 @@
 
                 <div class="admin-card">
                     <h3>Product List</h3>
-                    <button class="btn btn-secondary" onclick="loadProducts()"
-                        style="width: auto; margin-bottom: 1rem;"><i class="fas fa-sync"></i> Refresh List</button>
+                    <div style="display: flex; gap: 10px; margin-bottom: 1rem; align-items: center;">
+                        <button class="btn btn-secondary" onclick="loadProducts()" style="width: auto;"><i
+                                class="fas fa-sync"></i> Refresh</button>
+                        <button class="btn" onclick="deleteSelectedProducts()"
+                            style="width: auto; background-color: #e57373; color: white;"><i class="fas fa-trash"></i>
+                            Delete Selected</button>
+                        <button class="btn" onclick="deleteAllProducts()"
+                            style="width: auto; background-color: #d32f2f; color: white; margin-left: auto;"><i
+                                class="fas fa-bomb"></i> Delete ALL</button>
+                    </div>
 
                     <div style="overflow-x: auto;">
                         <table style="width: 100%; text-align: left; border-collapse: collapse;" id="product-table">
-                            <thead>
-                                <tr style="border-bottom: 2px solid #edeff2;">
-                                    <th style="width: 5%; text-align: center;">ID</th>
-                                    <th style="width: 10%; text-align: center;">Image</th>
-                                    <th style="width: 25%; padding-left: 15px;">Name</th>
-                                    <th style="width: 15%; color: var(--admin-pink); text-align: center;">Price</th>
-                                    <th style="width: 15%; color: var(--admin-blue); text-align: center;">Category</th>
-                                    <th style="width: 15%; color: var(--admin-green); text-align: center;">Link</th>
-                                    <th style="width: 15%; text-align: center;">Actions</th>
-                                </tr>
+                            <thead id="product-table-header">
+                                <!-- Replaced by JS -->
                             </thead>
                             <tbody id="product-table-body">
                                 <tr>
-                                    <td colspan="6" style="padding: 20px; text-align: center;">Loading...</td>
+                                    <td colspan="8" style="padding: 20px; text-align: center;">Loading...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -487,10 +527,45 @@
                             <label>Category</label>
                             <select id="edit-category">
                                 <option value="Uncategorized">Select...</option>
-                                <option value="top">Top (Áo)</option>
-                                <option value="bottom">Bottom (Quần/Váy)</option>
-                                <option value="dress">Dress (Đầm)</option>
-                                <option value="accessory">Accessory (Phụ kiện)</option>
+                                <optgroup label="Tops (Áo)">
+                                    <option value="Tops|T-shirt">T-shirt</option>
+                                    <option value="Tops|Shirt">Shirt</option>
+                                    <option value="Tops|Polo">Polo</option>
+                                    <option value="Tops|Hoodie">Hoodie</option>
+                                    <option value="Tops|Sweater">Sweater</option>
+                                    <option value="Tops|Blazer">Blazer</option>
+                                    <option value="Tops|Jacket">Jacket</option>
+                                    <option value="Tops|Crop top">Crop top</option>
+                                    <option value="Tops|Tank top">Tank top</option>
+                                </optgroup>
+                                <optgroup label="Bottoms (Quần/Váy)">
+                                    <option value="Bottoms|Jeans">Jeans</option>
+                                    <option value="Bottoms|Trousers">Trousers</option>
+                                    <option value="Bottoms|Jogger">Jogger</option>
+                                    <option value="Bottoms|Shorts">Shorts</option>
+                                    <option value="Bottoms|Skirt">Skirt (Chân váy)</option>
+                                    <option value="Bottoms|Leggings">Leggings</option>
+                                </optgroup>
+                                <optgroup label="One-piece (Đồ nguyên bộ)">
+                                    <option value="One-piece|Dress">Dress (Đầm)</option>
+                                    <option value="One-piece|Jumpsuit">Jumpsuit</option>
+                                    <option value="One-piece|Set đồ">Set (Bộ đồ)</option>
+                                </optgroup>
+                                <optgroup label="Shoes (Giày/Dép)">
+                                    <option value="Shoes|Sneaker">Sneaker</option>
+                                    <option value="Shoes|High heels">High heels</option>
+                                    <option value="Shoes|Boots">Boots</option>
+                                    <option value="Shoes|Sandals">Sandals</option>
+                                    <option value="Shoes|Loafers">Loafers</option>
+                                </optgroup>
+                                <optgroup label="Accessories (Phụ kiện)">
+                                    <option value="Accessories|Bag">Bag</option>
+                                    <option value="Accessories|Belt">Belt</option>
+                                    <option value="Accessories|Hat">Hat</option>
+                                    <option value="Accessories|Glasses">Glasses</option>
+                                    <option value="Accessories|Necklace">Necklace</option>
+                                    <option value="Accessories|Jewelry">Jewelry</option>
+                                </optgroup>
                             </select>
                         </div>
                         <div class="form-group">
@@ -501,6 +576,10 @@
                                 <option value="Party">Party</option>
                                 <option value="Streetwear">Streetwear</option>
                                 <option value="Vintage">Vintage</option>
+                                <option value="Minimal">Minimal</option>
+                                <option value="Sporty">Sporty</option>
+                                <option value="Elegant">Elegant</option>
+                                <option value="Y2K">Y2K</option>
                             </select>
                         </div>
 
@@ -518,21 +597,57 @@
                 <h2 class="section-title" style="text-align: left;">Data Crawler</h2>
                 <div class="admin-card">
                     <div class="form-group">
-                        <label>Source URL (Shopee/Shop)</label>
-                        <input type="text" id="crawl-url-input" placeholder="https://shopee.vn/..."
-                            value="https://shopee.vn/coolmate">
+                        <label>Shopee Shop URL</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="crawl-url-input" placeholder="https://shopee.vn/shop_name" value=""
+                                style="flex: 1;">
+                            <button class="btn btn-secondary" id="btn-start-crawl" onclick="startCrawl()"
+                                style="width: auto; white-space: nowrap;">
+                                <i class="fas fa-spider"></i> Start Crawling
+                            </button>
+                        </div>
                     </div>
-                    <button class="btn btn-secondary" onclick="startCrawl()" style="width: auto;">Start
-                        Crawling</button>
                     <div id="crawl-logs"
-                        style="margin-top: 1rem; background: #000; color: #0f0; padding: 1rem; border-radius: 8px; font-family: monospace; min-height: 100px; max-height: 300px; overflow-y: auto;">
+                        style="margin-top: 1rem; background: #1a1a2e; color: #0f0; padding: 1rem; border-radius: 8px; font-family: monospace; min-height: 60px; max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
                         > Ready to crawl...
                     </div>
                     <!-- Results Area -->
                     <div id="crawl-results" style="margin-top: 20px; display: none;">
-                        <h3>Crawled Results</h3>
-                        <div class="stat-grid" id="crawl-results-grid">
-                            <!-- Items will be injected here -->
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 style="margin: 0;"><i class="fas fa-check-double"></i> Crawled Products (<span
+                                    id="crawl-count">0</span> items)</h3>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn" onclick="toggleSelectAllCrawled()"
+                                    style="width: auto; background: #eee; color: #333; padding: 8px 16px;"><i
+                                        class="fas fa-check-square"></i> Select All</button>
+                                <button class="btn btn-primary" id="btn-save-crawled" onclick="saveCrawledProducts()"
+                                    style="width: auto; padding: 8px 20px;"><i class="fas fa-save"></i> Save Selected
+                                    Products</button>
+                            </div>
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; text-align: left; border-collapse: collapse;"
+                                id="crawl-results-table">
+                                <thead>
+                                    <tr style="border-bottom: 2px solid #edeff2;">
+                                        <th style="width: 5%; text-align: center; padding: 12px;"><input type="checkbox"
+                                                id="select-all-crawled" checked onclick="toggleSelectAllCrawled(this)">
+                                        </th>
+                                        <th style="width: 8%; text-align: center; padding: 12px;">Image</th>
+                                        <th style="width: 30%; padding: 12px;">Product Name</th>
+                                        <th
+                                            style="width: 15%; text-align: center; padding: 12px; color: var(--admin-blue);">
+                                            Category</th>
+                                        <th
+                                            style="width: 12%; text-align: center; padding: 12px; color: var(--admin-pink);">
+                                            Price</th>
+                                        <th style="width: 10%; text-align: center; padding: 12px;">Shopee Link</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="crawl-results-body">
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -646,10 +761,8 @@
                                 <p><strong>Joined:</strong> <span id="detail-joined"></span></p>
                                 <p><strong>Last Login:</strong> <span id="detail-last-login">Today at 10:30 AM
                                         (Mock)</span></p>
-                                <div style="margin-top: 10px;">
-                                    <button id="btn-reset-pass" class="btn"
-                                        style="background: #eee; width: 100%; font-size: 0.8rem;">Reset
-                                        Password</button>
+                                <div style="margin-top: 10px;" id="detail-user-badges">
+                                    <!-- Filled by JS -->
                                 </div>
                             </div>
                             <!-- Behavior Info -->
@@ -1233,12 +1346,157 @@
         }
 
 
+        // --- Product Management Logic ---
+        let currentProductList = [];
+
+        async function loadProducts() {
+            const tableBody = document.getElementById('product-table-body');
+            // Fix colspan to 8 to match header (7 + Checkbox)
+            document.getElementById('product-table-header').innerHTML = `
+                <tr style="border-bottom: 2px solid #edeff2;">
+                    <th style="width: 5%; text-align: center;"><input type="checkbox" id="select-all-products" onclick="toggleSelectAllProducts()"></th>
+                    <th style="width: 5%; text-align: center;">ID</th>
+                    <th style="width: 10%; text-align: center;">Image</th>
+                    <th style="width: 25%; padding-left: 15px;">Name</th>
+                    <th style="width: 15%; color: var(--admin-pink); text-align: center;">Price</th>
+                    <th style="width: 15%; color: var(--admin-blue); text-align: center;">Category</th>
+                    <th style="width: 10%; color: var(--admin-green); text-align: center;">Link</th>
+                    <th style="width: 15%; text-align: center;">Actions</th>
+                </tr>
+            `;
+
+            tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">Loading...</td></tr>';
+
+            try {
+                const res = await fetch(`${window.APP_CONFIG.getApiUrl()}/products`);
+                if (!res.ok) throw new Error('Failed to load products');
+
+                const products = await res.json();
+                currentProductList = products; // Store for valid checking
+                tableBody.innerHTML = '';
+
+                if (products.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No products found</td></tr>';
+                    return;
+                }
+
+                products.forEach(p => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid #f0f0f0';
+                    tr.style.height = '60px'; // Consistent height
+
+                    const priceFormatted = p.price ? p.price.toLocaleString() + ' VND' : '0 VND';
+                    const image = p.image || p.image_url || 'https://via.placeholder.com/50';
+
+                    // Truncate long names for display
+                    const displayName = p.name && p.name.length > 50 ? p.name.substring(0, 50) + '...' : (p.name || 'Unnamed');
+                    const category = p.category || 'Uncategorized';
+                    const subCategory = p.sub_category ? `(${p.sub_category})` : '';
+                    const productUrl = p.product_url || p.shopee_link || '';
+                    const displayLink = productUrl ? `<a href="${productUrl}" target="_blank" style="color: var(--admin-blue); font-weight: bold;"><i class="fas fa-external-link-alt"></i> Link</a>` : '-';
+
+                    // Actions column with edit/delete buttons
+                    tr.innerHTML = `
+                        <td style="text-align: center;"><input type="checkbox" class="product-checkbox" value="${p.id}"></td>
+                        <td style="text-align: center; color: #888;">${p.id}</td>
+                        <td style="text-align: center;"><img src="${image}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></td>
+                        <td style="padding-left: 15px; font-weight: 500;" title="${p.name}">${displayName}</td>
+                        <td style="text-align: center; color: var(--admin-pink); font-weight: 700;">${priceFormatted}</td>
+                        <td style="text-align: center;"><span style="background: #e3f2fd; color: var(--admin-blue); padding: 5px 10px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">${category} ${subCategory}</span></td>
+                        <td style="text-align: center;">${displayLink}</td>
+                        <td style="text-align: center;">
+                            <button class="action-btn" style="color: var(--admin-blue);" onclick="openEditModal(${p.id})"><i class="fas fa-edit"></i></button>
+                            <button class="action-btn delete" style="color: #e57373;" onclick="deleteProduct(${p.id})"><i class="fas fa-trash-alt"></i></button>
+                        </td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+            } catch (e) {
+                console.error("Error loading products:", e);
+                tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #e57373;">Error loading products. Is backend running?</td></tr>';
+            }
+        }
+
+        // --- Batch Delete ---
+        function toggleSelectAllProducts() {
+            const master = document.getElementById('select-all-products');
+            const checkboxes = document.querySelectorAll('.product-checkbox');
+            checkboxes.forEach(cb => cb.checked = master.checked);
+        }
+
+        async function deleteSelectedProducts() {
+            const checkboxes = document.querySelectorAll('.product-checkbox:checked');
+            if (checkboxes.length === 0) {
+                alert("Please select products to delete.");
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete ${checkboxes.length} products?`)) return;
+
+            const ids = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+            try {
+                const res = await fetch(`${window.APP_CONFIG.getApiUrl()}/products/batch_delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: ids })
+                });
+
+                if (res.ok) {
+                    alert('Selected products deleted successfully.');
+                    loadProducts();
+                } else {
+                    alert('Failed to delete products.');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Error processing batch delete.');
+            }
+        }
+
+        async function deleteAllProducts() {
+            if (!confirm("WARNING: This will delete ALL products in the database. Are you sure?")) return;
+            if (!confirm("Double check: This action cannot be undone. Delete ALL?")) return;
+
+            try {
+                const res = await fetch(`${window.APP_CONFIG.getApiUrl()}/products/batch_delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: 'ALL' }) // Signal to backend
+                });
+
+                if (res.ok) {
+                    alert('All products deleted successfully.');
+                    loadProducts();
+                } else {
+                    alert('Failed to delete products.');
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Error processing delete all.');
+            }
+        }
+
         async function addManualProduct() {
             const name = document.getElementById('manual-name').value;
             const price = document.getElementById('manual-price').value;
             const image = document.getElementById('manual-image').value;
             const link = document.getElementById('manual-link').value;
-            const category = document.getElementById('manual-category').value;
+            // Get Category and Sub-Category logic
+            // For simplicity in Manual UI, we might just take the value which could be "Tops|T-shirt" or just handle single value.
+            // Let's assume the value is "Category|SubCategory"
+            const categorySelect = document.getElementById('manual-category');
+            const rawCategory = categorySelect.value;
+
+            let category = "Uncategorized";
+            let sub_category = "General";
+
+            if (rawCategory && rawCategory.includes('|')) {
+                [category, sub_category] = rawCategory.split('|');
+            } else if (rawCategory) {
+                category = rawCategory;
+            }
+
             const style = document.getElementById('manual-style').value;
 
             if (!name || !price) {
@@ -1251,7 +1509,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        name, price: parseFloat(price), image, shopee_link: link, category, style
+                        name, price: parseFloat(price), image, shopee_link: link, category, sub_category, style
                     })
                 });
 
@@ -1304,8 +1562,28 @@
                 document.getElementById('edit-name').value = product.name;
                 document.getElementById('edit-price').value = product.price;
                 document.getElementById('edit-image').value = product.image;
-                document.getElementById('edit-link').value = product.shopee_link;
-                document.getElementById('edit-category').value = product.category || 'Uncategorized';
+                document.getElementById('edit-link').value = product.product_url || product.shopee_link || '';
+
+                // Set Category
+                // Construct the value "Category|SubCategory" to match options if possible
+                let catVal = product.category;
+                if (product.sub_category && product.sub_category !== 'General') {
+                    catVal = `${product.category}|${product.sub_category}`;
+                }
+
+                // Fallback if not exact match (basic checks)
+                // We try setting it.
+                const catSelect = document.getElementById('edit-category');
+                catSelect.value = catVal;
+                // If value didn't set (because it's custom or old), try just category
+                if (!catSelect.value && product.category) {
+                    // Try to find an option that starts with this category
+                    const opts = Array.from(catSelect.options);
+                    const match = opts.find(o => o.value.startsWith(product.category));
+                    if (match) catSelect.value = match.value;
+                    else catSelect.value = "Uncategorized";
+                }
+
                 // Also set style
                 const styleSelect = document.getElementById('edit-style');
                 if (styleSelect && product.style) styleSelect.value = product.style;
@@ -1329,15 +1607,24 @@
             const price = document.getElementById('edit-price').value;
             const image = document.getElementById('edit-image').value;
             const link = document.getElementById('edit-link').value;
-            const category = document.getElementById('edit-category').value;
+            const rawCategory = document.getElementById('edit-category').value;
             const style = document.getElementById('edit-style').value;
+
+            let category = "Uncategorized";
+            let sub_category = "General";
+
+            if (rawCategory && rawCategory.includes('|')) {
+                [category, sub_category] = rawCategory.split('|');
+            } else if (rawCategory) {
+                category = rawCategory;
+            }
 
             try {
                 const res = await fetch(`${window.APP_CONFIG.getApiUrl()}/products/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        name, price: parseFloat(price), image, shopee_link: link, category, style
+                        name, price: parseFloat(price), image, shopee_link: link, category, sub_category, style
                     })
                 });
 
@@ -1357,39 +1644,57 @@
 
         let currentCrawledData = [];
 
+        // Toggle select all crawled products
+        function toggleSelectAllCrawled(masterCheckbox) {
+            const checkboxes = document.querySelectorAll('.crawl-checkbox');
+            if (masterCheckbox) {
+                checkboxes.forEach(cb => cb.checked = masterCheckbox.checked);
+            } else {
+                // Toggle all
+                const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                checkboxes.forEach(cb => cb.checked = !allChecked);
+                const master = document.getElementById('select-all-crawled');
+                if (master) master.checked = !allChecked;
+            }
+        }
+
         // Crawl Function
+        // Hàm crawl (sửa lại để hiển thị lỗi từ server)
         async function startCrawl() {
             const urlInput = document.getElementById('crawl-url-input');
             const logDiv = document.getElementById('crawl-logs');
             const resultsDiv = document.getElementById('crawl-results');
-            const resultsGrid = document.getElementById('crawl-results-grid');
-            const url = urlInput.value;
+            const resultsBody = document.getElementById('crawl-results-body');
+            const btnStartCrawl = document.getElementById('btn-start-crawl');
+            const url = urlInput.value.trim();
 
             if (!url) {
-                alert('Please enter a valid Shopee URL');
+                alert('Vui lòng nhập URL shop Shopee');
                 return;
             }
 
             // Reset UI
-            logDiv.innerHTML = '> Ready to crawl...<br>';
+            logDiv.innerHTML = '';
             resultsDiv.style.display = 'none';
-            resultsGrid.innerHTML = '';
+            resultsBody.innerHTML = '';
             currentCrawledData = [];
 
-            function log(msg) {
-                logDiv.innerHTML += `> ${msg}<br>`;
+            // Disable button
+            btnStartCrawl.disabled = true;
+            btnStartCrawl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang crawl...';
+
+            function log(msg, type = 'info') {
+                const color = type === 'error' ? '#ff6b6b' : type === 'success' ? '#51cf66' : '#0f0';
+                logDiv.innerHTML += `<span style="color:${color}"> ${msg}</span><br>`;
                 logDiv.scrollTop = logDiv.scrollHeight;
             }
 
             try {
-                log(`Connecting to: ${url}...`);
-                log('Initializing proxy...');
-
-                // Simulate steps
-                await new Promise(r => setTimeout(r, 800));
-                log('Bypassing anti-bot protection...');
-                await new Promise(r => setTimeout(r, 800));
-                log('Connection established. Parsing page...');
+                log(`[1/4] Đang kết nối tới: ${url}...`);
+                await new Promise(r => setTimeout(r, 500));
+                log('[2/4] Đang khởi tạo crawler...');
+                await new Promise(r => setTimeout(r, 500));
+                log('[3/4] Đang lấy dữ liệu sản phẩm (có thể mất 30-60 giây)...');
 
                 const response = await fetch(`${window.APP_CONFIG.getApiUrl()}/crawl`, {
                     method: 'POST',
@@ -1399,80 +1704,79 @@
 
                 const data = await response.json();
 
-                if (response.ok) {
-                    log('Extracting product data...');
-                    await new Promise(r => setTimeout(r, 500));
-                    log('Downloading images...');
-                    await new Promise(r => setTimeout(r, 500));
-                    log(`SUCCESS: Found ${data.count} items. Please review below.`);
+                if (!response.ok) {
+                    // Lỗi từ server (status 4xx, 5xx)
+                    throw new Error(data.message || `Lỗi HTTP ${response.status}`);
+                }
 
-                    // Store data for saving later
+                if (data.products && data.products.length > 0) {
+                    log(`[4/4] THÀNH CÔNG: Tìm thấy ${data.count} sản phẩm!`, 'success');
+
                     currentCrawledData = data.products;
+                    document.getElementById('crawl-count').textContent = data.count;
 
-                    // Render Results with Checkboxes
+                    // Render bảng
                     resultsDiv.style.display = 'block';
+                    resultsBody.innerHTML = '';
 
-                    // Add "Save Selected" Button if not exists
-                    let saveBtn = document.getElementById('btn-save-crawled');
-                    if (!saveBtn) {
-                        saveBtn = document.createElement('button');
-                        saveBtn.id = 'btn-save-crawled';
-                        saveBtn.className = 'btn btn-primary';
-                        saveBtn.innerText = 'Save Selected Products';
-                        saveBtn.style.marginTop = '1rem';
-                        saveBtn.onclick = saveCrawledProducts;
-                        resultsDiv.insertBefore(saveBtn, resultsGrid);
-                    }
-
-                    resultsGrid.innerHTML = '';
                     data.products.forEach((prod, index) => {
-                        const card = document.createElement('div');
-                        card.className = 'stat-card';
-                        card.style.padding = '1rem';
-                        card.style.position = 'relative';
+                        const imgUrl = prod.image_url || prod.image || 'https://via.placeholder.com/50';
+                        const productLink = prod.product_url || '#';
+                        const priceDisplay = prod.price ? prod.price.toLocaleString() + ' VND' : '0 VND';
+                        const categoryDisplay = prod.category || prod.item_type || 'Uncategorized';
+                        const subCatDisplay = prod.sub_category ? ` / ${prod.sub_category}` : '';
+                        const displayName = prod.name && prod.name.length > 60 ? prod.name.substring(0, 60) + '...' : (prod.name || 'Unnamed');
 
-                        card.innerHTML = `
-                            <div style="position: absolute; top: 10px; right: 10px;">
-                                <input type="checkbox" class="crawl-checkbox" data-index="${index}" checked style="transform: scale(1.5);">
-                            </div>
-                            <img src="${prod.image}" style="width: 100%; height: 150px; object-fit: cover; border-radius: 8px; margin-bottom: 10px;">
-                            <h4 style="font-size: 1rem; margin-bottom: 5px;">${prod.name}</h4>
-                            <p style="color: var(--admin-pink); font-weight: bold;">${prod.price.toLocaleString()} VND</p>
-                            <span style="font-size: 0.8rem; background: #eee; padding: 2px 8px; border-radius: 4px;">${prod.category}</span>
-                            <br>
-                            <a href="${prod.shopee_link}" target="_blank" style="font-size: 0.8rem; color: blue;">View Original</a>
-                        `;
-                        resultsGrid.appendChild(card);
+                        const tr = document.createElement('tr');
+                        tr.style.borderBottom = '1px solid #f0f0f0';
+                        tr.innerHTML = `
+                    <td style="text-align: center; padding: 10px;"><input type="checkbox" class="crawl-checkbox" data-index="${index}" checked style="transform: scale(1.3); cursor: pointer;"></td>
+                    <td style="text-align: center; padding: 10px;"><img src="${imgUrl}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px;" onerror="this.src='https://via.placeholder.com/50'"></td>
+                    <td style="padding: 10px; font-weight: 500;" title="${prod.name || ''}">${displayName}</td>
+                    <td style="text-align: center; padding: 10px;"><span style="background: #e3f2fd; color: var(--admin-blue); padding: 4px 10px; border-radius: 12px;">${categoryDisplay}${subCatDisplay}</span></td>
+                    <td style="text-align: center; padding: 10px; color: var(--admin-pink); font-weight: 700;">${priceDisplay}</td>
+                    <td style="text-align: center; padding: 10px;"><a href="${productLink}" target="_blank" style="color: var(--admin-blue);"><i class="fas fa-external-link-alt"></i></a></td>
+                `;
+                        resultsBody.appendChild(tr);
                     });
+
+                    resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 } else {
-                    console.error('Crawl Error:', data);
-                    log(`ERROR: ${data.message || 'Server Error'}`);
-                    alert(`Crawl Failed: ${data.message || 'Unknown Server Error'}`);
+                    // Crawl thành công nhưng không có sản phẩm
+                    log(`[4/4] THÔNG BÁO: ${data.message || 'Không tìm thấy sản phẩm'}`, 'error');
+                    alert(`Crawl hoàn tất: ${data.message}`);
                 }
 
             } catch (error) {
-                console.error(error);
-                log(`CRITICAL ERROR: ${error.message}`);
-                alert(`Request Failed: ${error.message}\nCheck logs.`);
+                console.error('Crawl error:', error);
+                log(`❌ LỖI: ${error.message}`, 'error');
+                alert(`Crawl thất bại: ${error.message}\nKiểm tra console để biết thêm chi tiết.`);
+            } finally {
+                btnStartCrawl.disabled = false;
+                btnStartCrawl.innerHTML = '<i class="fas fa-spider"></i> Start Crawling';
             }
         }
 
         async function saveCrawledProducts() {
             const checkboxes = document.querySelectorAll('.crawl-checkbox:checked');
             if (checkboxes.length === 0) {
-                alert("Please select at least one product to save.");
+                alert('Please select at least one product to save.');
                 return;
             }
 
             const productsToSave = [];
             checkboxes.forEach(cb => {
-                const index = cb.getAttribute('data-index');
+                const index = parseInt(cb.getAttribute('data-index'));
                 if (currentCrawledData[index]) {
                     productsToSave.push(currentCrawledData[index]);
                 }
             });
 
-            if (!confirm(`Are you sure you want to save ${productsToSave.length} products?`)) return;
+            if (!confirm(`Save ${productsToSave.length} products to Products & Outfits?`)) return;
+
+            const saveBtn = document.getElementById('btn-save-crawled');
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
 
             try {
                 const res = await fetch(`${window.APP_CONFIG.getApiUrl()}/crawl/save`, {
@@ -1483,17 +1787,24 @@
 
                 const data = await res.json();
                 if (res.ok) {
-                    alert(data.message);
+                    alert(`✅ ${data.message}`);
                     // Hide results and clear logs
                     document.getElementById('crawl-results').style.display = 'none';
                     document.getElementById('crawl-logs').innerHTML = '> Ready to crawl...';
-                    loadProducts(); // Refresh main list
+                    currentCrawledData = [];
+                    // Refresh products list
+                    if (typeof loadProducts === 'function') await loadProducts();
+                    // Navigate to Products & Outfits tab to see saved products
+                    showAdminModule('products');
                 } else {
                     alert(`Save Failed: ${data.message}`);
                 }
             } catch (e) {
                 console.error(e);
                 alert(`Error saving products: ${e.message}`);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Selected Products';
             }
         }
 

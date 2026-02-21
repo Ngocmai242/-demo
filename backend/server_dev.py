@@ -1,8 +1,15 @@
 import sys
 import os
 
-# Add backend directory to sys.path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Ensure project root (so data_engine, frontend, etc. can be imported)
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+if CURRENT_DIR not in sys.path:
+    sys.path.append(CURRENT_DIR)
 
 from app import create_app
 

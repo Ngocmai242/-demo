@@ -1,11 +1,32 @@
+import csv
+import io
 import os
 import time
-import random
 from datetime import datetime
-from flask import Blueprint, request, jsonify, session, send_from_directory, current_app
-from werkzeug.security import generate_password_hash, check_password_hash
+
+from flask import (
+    Blueprint,
+    Response,
+    current_app,
+    jsonify,
+    request,
+    send_from_directory,
+    session,
+)
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from . import db
-from .models import User, Outfit, Product
+from .models import (
+    Category,
+    Color,
+    ItemType,
+    Occasion,
+    Outfit,
+    Product,
+    Season,
+    Style,
+    User,
+)
 
 # Add project root to path to import data_engine
 import sys
@@ -15,12 +36,24 @@ try:
     from data_engine.crawler.shopee import crawl_shop_url
     CRAWLER_AVAILABLE = True
 except ImportError as e:
-    print(f"Warning: Could not import crawler: {e}. Ensure 'playwright' is installed.")
+    print(f"Warning: Could not import crawler: {e}. Ensure 'requests' is installed (pip install requests).")
     CRAWLER_AVAILABLE = False
     def crawl_shop_url(url, limit=50): return []
 
 
 main_bp = Blueprint('main', __name__)
+
+def get_or_create(model, defaults=None, **kwargs):
+    instance = model.query.filter_by(**kwargs).first()
+    if instance:
+        return instance
+    params = dict(kwargs)
+    if defaults:
+        params.update(defaults)
+    instance = model(**params)
+    db.session.add(instance)
+    db.session.flush()
+    return instance
 
 # --- Serve Frontend Routes ---
 @main_bp.route('/')
@@ -330,31 +363,42 @@ def crawl():
     shop_url = data.get('url')
     
     if not shop_url:
-        return jsonify({'message': 'Missing URL'}), 400
+        return jsonify({'message': 'Thiếu URL'}), 400
 
     if not CRAWLER_AVAILABLE:
         return jsonify({
-            'message': 'Crawler dependencies missing. Server cannot crawl. Please run: pip install playwright && playwright install'
+            'message': 'Crawler dependencies missing. Please run: pip install requests beautifulsoup4'
         }), 500
 
     try:
-        # Perform Crawling (Synchronous for simplicity)
-        print(f"Starting crawl for: {shop_url}")
-        crawled_products = crawl_shop_url(shop_url, limit=50) # Limit to 50 as requested
+        # Gọi crawler
+        current_app.logger.info(f"[CRAWL] Bắt đầu crawl: {shop_url}")
+        crawled_products = crawl_shop_url(shop_url, limit=50)
         
         if not crawled_products:
-             return jsonify({'message': 'Crawling completed but no products found. Check URL or try again.'}), 404
+            return jsonify({
+                'message': 'Crawl thành công nhưng không tìm thấy sản phẩm. Kiểm tra lại URL hoặc thử lại sau.',
+                'products': [],
+                'count': 0
+            }), 200
 
-        # Return crawled data for review instead of saving immediately
+        # Trả về dữ liệu cho frontend xem trước
         return jsonify({
-            'message': 'Crawling successful', 
+            'message': 'Crawl thành công',
             'count': len(crawled_products),
             'products': crawled_products
         }), 200
 
     except Exception as e:
-        print(f"Crawl Error: {e}")
-        return jsonify({'message': f'Server Error during crawl: {str(e)}'}), 500
+        # Ghi log lỗi chi tiết
+        current_app.logger.error(f"[CRAWL ERROR] {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        # Trả về thông báo lỗi rõ ràng
+        return jsonify({
+            'message': f'Lỗi khi crawl: {str(e)}'
+        }), 500
 
 @main_bp.route('/api/crawl/save', methods=['POST'])
 def save_crawled_products():
@@ -369,32 +413,105 @@ def save_crawled_products():
     
     try:
         for item in products_to_save:
-            # Check if product already exists (by link)
-            existing = Product.query.filter_by(shopee_link=item['shopee_link']).first()
-            if not existing:
-                new_prod = Product(
-                    name=item['name'],
-                    image_path=item['image'],
-                    shopee_link=item['shopee_link'], 
-                    price=item['price'],
-                    category=item.get('category', 'Uncategorized'),
-                    sub_category=item.get('sub_category', 'General'),
-                    gender=item.get('gender', 'Unisex'),
-                    material=item.get('material', 'Chưa xác định'),
-                    style=item.get('style', 'Casual'),
-                    details=item.get('details', ''),
-                    shop_name=item.get('shop_name', 'Shopee Store'),
-                    is_active=True
-                )
-                new_db_items.append(new_prod)
+            item_id_value = item.get('itemid') or item.get('item_id') or item.get('itemId')
+            link_value = item.get('product_url') or item.get('shopee_link')
+
+            if not item_id_value and not link_value:
+                continue
+
+            item_id = str(item_id_value) if item_id_value else None
+
+            product = None
+            if item_id:
+                product = Product.query.filter_by(item_id=item_id).first()
+            if not product and link_value:
+                product = Product.query.filter_by(product_url=link_value[:2000]).first()
+
+            created = False
+            if not product:
+                if not item_id:
+                    continue
+                product = Product(item_id=item_id)
+                db.session.add(product)
+                created = True
+            try:
+                if item_id:
+                    product.item_id = int(item_id)
+            except:
+                pass
+
+            product.name = (item.get('name') or '')[:200]
+            product.image_url = (item.get('image_url') or item.get('image') or '')[:500]
+            product.product_url = (link_value or '')[:2000]
+
+            try:
+                product.price = int(float(item.get('price', 0)))
+            except (TypeError, ValueError):
+                product.price = 0
+
+            product.gender = (item.get('gender') or 'Unisex')[:20]
+            product.material = (item.get('material') or 'Other')[:100]
+            product.fit_type = (item.get('fit_type') or 'Regular fit')[:50]
+            product.color_tone = (item.get('color_tone') or 'Neutral')[:20]
+            product.details = (item.get('details') or '')[:200]
+            product.shop_name = (item.get('shop_name') or 'Shopee Store')[:150]
+            product.crawl_date = datetime.utcnow()
+            product.is_active = True
+
+            item_type_name = (item.get('item_type') or item.get('category') or 'Other').strip() or 'Other'
+            category_name = (item.get('sub_category') or 'Other').strip() or 'Other'
+            color_name = (item.get('color') or 'Multicolor').strip() or 'Multicolor'
+            color_tone = (item.get('color_tone') or 'Pattern').strip() or 'Pattern'
+            style_name = (item.get('style') or 'Casual').strip() or 'Casual'
+
+            season_raw = item.get('season')
+            if isinstance(season_raw, list) and season_raw:
+                season_name = str(season_raw[0])
+            else:
+                season_name = str(season_raw or 'All-season')
+
+            occasion_raw = item.get('occasion')
+            if isinstance(occasion_raw, list) and occasion_raw:
+                occasion_name = str(occasion_raw[0])
+            else:
+                occasion_name = str(occasion_raw or 'Daily wear')
+
+            product.category_label = item_type_name[:50]
+            product.sub_category_label = category_name[:50]
+            product.color_label = color_name[:50]
+            product.style_label = style_name[:50]
+            product.season_label = season_name[:50]
+            product.occasion_label = occasion_name[:50]
+
+            item_type = get_or_create(ItemType, name=item_type_name)
+            category = get_or_create(Category, name=category_name, defaults={"item_type": item_type})
+            color = get_or_create(Color, name=color_name, defaults={"tone": color_tone})
+            if color.tone != color_tone and color_tone:
+                color.tone = color_tone
+            style = get_or_create(Style, name=style_name)
+            season = get_or_create(Season, name=season_name)
+            occasion = get_or_create(Occasion, name=occasion_name)
+
+            product.item_type = item_type
+            product.category = category
+            product.color = color
+            product.style_ref = style
+            product.season_ref = season
+            product.occasion_ref = occasion
+
+            if created:
                 saved_count += 1
-        
-        if new_db_items:
-            db.session.add_all(new_db_items)
-            db.session.commit()
-            
-        return jsonify({'message': f'Successfully saved {saved_count} new products.', 'saved_count': saved_count}), 200
-        
+            else:
+                new_db_items.append(product)
+
+        db.session.commit()
+
+        return jsonify({
+            'message': f'Catalog updated. Added {saved_count} new products and refreshed {len(new_db_items)} items.',
+            'saved_count': saved_count,
+            'updated_count': len(new_db_items)
+        }), 200
+
     except Exception as e:
         db.session.rollback()
         print(f"Save Crawl Error: {e}")
@@ -403,30 +520,111 @@ def save_crawled_products():
 @main_bp.route('/api/products', methods=['GET', 'POST'])
 def products():
     if request.method == 'GET':
-        products = Product.query.limit(100).all()
-        return jsonify([{
-            'id': p.id,
-            'name': p.name, 
-            'image': p.image_path,
-            'price': p.price,
-            'category': p.category,
-            'shopee_link': p.shopee_link
-        } for p in products]), 200
+        products = Product.query.order_by(Product.id.desc()).limit(100).all()
+        payload = []
+        for p in products:
+            payload.append({
+                'id': p.id,
+                'item_id': p.item_id,
+                'name': p.name,
+                'image': p.image_url,
+                'price': p.price,
+                'category': p.item_type.name if p.item_type else p.category_label,
+                'sub_category': p.category.name if p.category else p.sub_category_label,
+                'product_url': p.product_url,
+                'color': p.color.name if p.color else p.color_label,
+                'color_tone': p.color.tone if p.color else p.color_tone,
+                'season': p.season_ref.name if p.season_ref else p.season_label,
+                'occasion': p.occasion_ref.name if p.occasion_ref else p.occasion_label,
+                'gender': p.gender,
+                'material': p.material,
+                'style': p.style_ref.name if p.style_ref else p.style_label,
+                'fit_type': p.fit_type,
+                'details': p.details,
+                'shop_name': p.shop_name,
+            })
+        return jsonify(payload), 200
 
     if request.method == 'POST':
         data = request.json
-        new_prod = Product(
-            name=data.get('name'),
-            image_path=data.get('image'),
-            shopee_link=data.get('shopee_link'),
-            price=data.get('price', 0),
-            category=data.get('category', 'Uncategorized'),
-            style=data.get('style', 'Casual'),
-            shop_name=data.get('shop_name', 'Manual Entry')
-        )
-        db.session.add(new_prod)
+        if not data:
+            return jsonify({'message': 'Missing payload'}), 400
+
+        item_id = data.get('item_id') or data.get('shopee_link')
+        if not item_id:
+            return jsonify({'message': 'item_id or shopee_link required'}), 400
+
+        product = Product(item_id=str(item_id))
+        product.name = (data.get('name') or '')[:200]
+        product.image_url = (data.get('image') or '')[:500]
+        product.product_url = (data.get('product_url') or data.get('shopee_link') or '')[:2000]
+        product.price = int(data.get('price', 0) or 0)
+        product.shop_name = (data.get('shop_name') or 'Manual Entry')[:150]
+        product.gender = (data.get('gender') or 'Unisex')[:20]
+        product.material = (data.get('material') or 'Other')[:100]
+        product.fit_type = (data.get('fit_type') or 'Regular fit')[:50]
+        product.color_tone = color_tone[:20]
+        product.details = (data.get('details') or '')[:200]
+
+        category_field = data.get('category') or 'Other'
+        if isinstance(category_field, str) and '|' in category_field:
+            item_type_name, sub_category_name = [part.strip() for part in category_field.split('|', 1)]
+        else:
+            item_type_name = str(category_field).strip() or 'Other'
+            sub_category_name = (data.get('sub_category') or 'Other').strip() or 'Other'
+
+        style_name = (data.get('style') or 'Casual').strip() or 'Casual'
+        color_name = (data.get('color') or 'Multicolor').strip() or 'Multicolor'
+        color_tone = (data.get('color_tone') or 'Pattern').strip() or 'Pattern'
+        season_name = (data.get('season') or 'All-season').strip() or 'All-season'
+        occasion_name = (data.get('occasion') or 'Daily wear').strip() or 'Daily wear'
+
+        product.category_label = item_type_name[:50]
+        product.sub_category_label = sub_category_name[:50]
+        product.color_label = color_name[:50]
+        product.style_label = style_name[:50]
+        product.season_label = season_name[:50]
+        product.occasion_label = occasion_name[:50]
+
+        item_type = get_or_create(ItemType, name=item_type_name)
+        category = get_or_create(Category, name=sub_category_name, defaults={'item_type': item_type})
+        color = get_or_create(Color, name=color_name, defaults={'tone': color_tone})
+        if color.tone != color_tone and color_tone:
+            color.tone = color_tone
+        style = get_or_create(Style, name=style_name)
+        season = get_or_create(Season, name=season_name)
+        occasion = get_or_create(Occasion, name=occasion_name)
+
+        product.item_type = item_type
+        product.category = category
+        product.color = color
+        product.style_ref = style
+        product.season_ref = season
+        product.occasion_ref = occasion
+
+        db.session.add(product)
         db.session.commit()
         return jsonify({'message': 'Product added manually'}), 201
+
+@main_bp.route('/api/products/batch_delete', methods=['POST'])
+def batch_delete_products():
+    data = request.json
+    ids = data.get('ids', [])
+    
+    if not ids:
+        return jsonify({'message': 'No IDs provided'}), 400
+        
+    try:
+        if ids == 'ALL':
+             num_deleted = db.session.query(Product).delete()
+        else:
+             num_deleted = db.session.query(Product).filter(Product.id.in_(ids)).delete(synchronize_session=False)
+
+        db.session.commit()
+        return jsonify({'message': f'Deleted {num_deleted} products successfully.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error deleting products: {str(e)}'}), 500
 
 @main_bp.route('/api/products/<int:id>', methods=['GET', 'DELETE', 'PUT'])
 def product_detail(id):
@@ -437,14 +635,23 @@ def product_detail(id):
     if request.method == 'GET':
         return jsonify({
             'id': product.id,
+            'item_id': product.item_id,
             'name': product.name,
-            'image': product.image_path,
+            'image': product.image_url,
             'price': product.price,
-            'category': product.category,
-            'sub_category': product.sub_category,
-            'style': product.style,
+            'category': product.item_type.name if product.item_type else product.category_label,
+            'sub_category': product.category.name if product.category else product.sub_category_label,
+            'style': product.style_ref.name if product.style_ref else product.style_label,
             'shop_name': product.shop_name,
-            'shopee_link': product.shopee_link
+            'product_url': product.product_url,
+            'color': product.color.name if product.color else product.color_label,
+            'color_tone': product.color.tone if product.color else product.color_tone,
+            'season': product.season_ref.name if product.season_ref else product.season_label,
+            'occasion': product.occasion_ref.name if product.occasion_ref else product.occasion_label,
+            'gender': product.gender,
+            'material': product.material,
+            'fit_type': product.fit_type,
+            'details': product.details,
         }), 200
 
     if request.method == 'DELETE':
@@ -454,17 +661,142 @@ def product_detail(id):
 
     if request.method == 'PUT':
         data = request.json
-        if 'name' in data: product.name = data['name']
-        if 'price' in data: product.price = data['price']
-        if 'image' in data: product.image_path = data['image']
-        if 'shopee_link' in data: product.shopee_link = data['shopee_link']
-        if 'category' in data: product.category = data['category']
-        if 'sub_category' in data: product.sub_category = data['sub_category']
-        if 'style' in data: product.style = data['style']
-        if 'shop_name' in data: product.shop_name = data['shop_name']
-        
+        if not data:
+            return jsonify({'message': 'No changes provided'}), 400
+
+        if 'name' in data:
+            product.name = data['name']
+        if 'price' in data:
+            try:
+                product.price = int(float(data['price']))
+            except (TypeError, ValueError):
+                pass
+        if 'image' in data:
+            product.image_url = data['image']
+        if 'product_url' in data:
+            product.product_url = data['product_url']
+        elif 'shopee_link' in data:
+            product.product_url = data['shopee_link']
+        if 'shop_name' in data:
+            product.shop_name = data['shop_name']
+        if 'gender' in data:
+            product.gender = data['gender']
+        if 'material' in data:
+            product.material = data['material']
+        if 'fit_type' in data:
+            product.fit_type = data['fit_type']
+        if 'details' in data:
+            product.details = data['details']
+
+        category_field = data.get('category')
+        sub_category_name = data.get('sub_category')
+
+        if category_field or sub_category_name:
+            if category_field and isinstance(category_field, str) and '|' in category_field:
+                item_type_name, sub_category_name = [part.strip() for part in category_field.split('|', 1)]
+            else:
+                item_type_name = str(category_field).strip() if category_field else (product.item_type.name if product.item_type else product.category_label or 'Other')
+                sub_category_name = sub_category_name or product.category.name if product.category else product.sub_category_label or 'Other'
+
+            item_type = get_or_create(ItemType, name=item_type_name)
+            category = get_or_create(Category, name=sub_category_name, defaults={'item_type': item_type})
+            product.item_type = item_type
+            product.category = category
+            product.category_label = item_type_name[:50]
+            product.sub_category_label = sub_category_name[:50]
+
+        if 'style' in data:
+            style_name = data['style'] or 'Casual'
+            style = get_or_create(Style, name=style_name)
+            product.style_ref = style
+            product.style_label = style_name[:50]
+
+        if 'color' in data or 'color_tone' in data:
+            color_name = data.get('color', product.color.name if product.color else product.color_label or 'Multicolor')
+            color_tone = data.get('color_tone', product.color.tone if product.color else product.color_tone or 'Pattern')
+            color = get_or_create(Color, name=color_name, defaults={'tone': color_tone})
+            if color.tone != color_tone and color_tone:
+                color.tone = color_tone
+            product.color = color
+            product.color_label = color_name[:50]
+            product.color_tone = color_tone[:20]
+
+        if 'season' in data:
+            season_name = data['season'] or 'All-season'
+            season = get_or_create(Season, name=season_name)
+            product.season_ref = season
+            product.season_label = season_name[:50]
+
+        if 'occasion' in data:
+            occasion_name = data['occasion'] or 'Daily wear'
+            occasion = get_or_create(Occasion, name=occasion_name)
+            product.occasion_ref = occasion
+            product.occasion_label = occasion_name[:50]
+
         db.session.commit()
         return jsonify({'message': 'Product updated successfully'}), 200
+
+
+@main_bp.route('/api/dataset', methods=['GET'])
+def export_dataset():
+    export_format = (request.args.get('format') or 'json').lower()
+    products = (
+        Product.query
+        .outerjoin(ItemType)
+        .outerjoin(Category)
+        .outerjoin(Color)
+        .outerjoin(Style)
+        .outerjoin(Season)
+        .outerjoin(Occasion)
+        .all()
+    )
+
+    dataset = []
+    for p in products:
+        dataset.append({
+            'name': p.name,
+            'item_type': p.item_type.name if p.item_type else p.category_label,
+            'category': p.category.name if p.category else p.sub_category_label,
+            'color': p.color.name if p.color else p.color_label,
+            'color_tone': p.color.tone if p.color else p.color_tone,
+            'style': p.style_ref.name if p.style_ref else p.style_label,
+            'season': p.season_ref.name if p.season_ref else p.season_label,
+            'occasion': p.occasion_ref.name if p.occasion_ref else p.occasion_label,
+            'gender': p.gender,
+            'material': p.material,
+            'fit_type': p.fit_type,
+            'price': p.price,
+            'product_url': p.product_url,
+        })
+
+    if export_format == 'csv':
+        output = io.StringIO()
+        fieldnames = [
+            'name',
+            'item_type',
+            'category',
+            'color',
+            'color_tone',
+            'style',
+            'season',
+            'occasion',
+            'gender',
+            'material',
+            'fit_type',
+            'price',
+            'product_url',
+        ]
+        writer = csv.DictWriter(output, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(dataset)
+
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=fashion_dataset.csv'},
+        )
+
+    return jsonify({'count': len(dataset), 'items': dataset}), 200
 
 
 @main_bp.route('/api/tryon', methods=['GET'])
