@@ -340,6 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const changeBgCancel = document.getElementById('changebg-cancel');
     let pendingChangeBgFile = null;
     let pendingBgFile = null;
+    let pendingRemoveFile = null;
     const navRemoveBg = document.getElementById('nav-remove-bg');
     const navChangeBg = document.getElementById('nav-change-bg');
     const navRecolor = document.getElementById('nav-recolor');
@@ -519,56 +520,91 @@ document.addEventListener('DOMContentLoaded', () => {
         if (removeBgChoose && fileRemove) {
             removeBgChoose.addEventListener('click', () => fileRemove.click());
         }
-        fileRemove.addEventListener('change', async (e) => {
+        fileRemove.addEventListener('change', (e) => {
             const f = e.target.files && e.target.files[0];
             if (!f) return;
-            const origUrl = URL.createObjectURL(f);
-            lastOriginalBlob = f;
-            outRemove.innerHTML = '<div style="padding:12px; color:#666;">Processing...</div>';
-            const fd = new FormData();
-            fd.append('image', f);
-            try {
-                const res = await fetch(`${API_URL}/remove-bg`, { method: 'POST', body: fd });
-                const ct = res.headers.get('content-type') || '';
-                if (!res.ok) {
-                    let msg = 'Image processing error';
-                    if (ct.includes('application/json')) {
-                        const j = await res.json().catch(() => ({}));
-                        msg = j.message || msg;
-                    } else {
-                        msg = await res.text().catch(() => msg);
-                    }
-                    outRemove.innerHTML = `<div style="padding:12px; color:#e57373;">${msg}</div>`;
-                    return;
+            pendingRemoveFile = f;
+            if (document.getElementById('removebg-file-panel')) {
+                document.getElementById('removebg-file-panel').style.display = 'block';
+                const nameEl = document.getElementById('removebg-file-name');
+                if (nameEl) nameEl.innerHTML = `<i class="fas fa-user"></i> Image: ${f.name}`;
+                const th = document.getElementById('removebg-file-thumb');
+                if (th) {
+                    const u = URL.createObjectURL(f);
+                    th.src = u;
+                    th.onload = () => URL.revokeObjectURL(u);
                 }
-                if (ct.includes('image/')) {
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    outRemove.innerHTML = `
-                        <div style="display:flex; gap:16px; flex-wrap:wrap;">
-                            <div style="flex:1; min-width:240px;">
-                                <div style="font-weight:600; margin-bottom:6px;">Original</div>
-                                <img src="${origUrl}" alt="original" style="max-width:100%; border-radius:8px; border:1px solid #eee;">
-                            </div>
-                            <div style="flex:1; min-width:240px;">
-                                <div style="font-weight:600; margin-bottom:6px;">Background Removed (PNG)</div>
-                                <img src="${url}" alt="result" style="max-width:100%; border-radius:8px; border:1px solid #eee; background:checkerboard;">
-                                <div style="margin-top:8px;">
-                                    <a href="${url}" download="removed_bg.png" class="btn btn-secondary" style="width:auto;">Download</a>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    const txt = await res.text();
-                    outRemove.innerHTML = `<div style="padding:12px; color:#e57373;">${txt || 'Invalid response'}</div>`;
-                }
-            } catch (err) {
-                outRemove.innerHTML = `<div style="padding:12px; color:#e57373;">${err.message || 'Server connection error'}</div>`;
-            } finally {
-                fileRemove.value = '';
             }
         });
+        const removeConfirm = document.getElementById('removebg-confirm');
+        const removeCancel = document.getElementById('removebg-cancel');
+        if (removeConfirm) {
+            removeConfirm.addEventListener('click', async () => {
+                if (!pendingRemoveFile) return;
+                const origUrl = URL.createObjectURL(pendingRemoveFile);
+                lastOriginalBlob = pendingRemoveFile;
+                outRemove.innerHTML = '<div style="padding:12px; color:#666;">Processing...</div>';
+                const fd = new FormData();
+                fd.append('image', pendingRemoveFile);
+                try {
+                    const res = await fetch(`${API_URL}/remove-bg`, { method: 'POST', body: fd });
+                    const ct = res.headers.get('content-type') || '';
+                    if (!res.ok) {
+                        let msg = 'Image processing error';
+                        if (ct.includes('application/json')) {
+                            const j = await res.json().catch(() => ({}));
+                            msg = j.message || msg;
+                        } else {
+                            msg = await res.text().catch(() => msg);
+                        }
+                        outRemove.innerHTML = `<div style="padding:12px; color:#e57373;">${msg}</div>`;
+                        return;
+                    }
+                    if (ct.includes('image/')) {
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        outRemove.innerHTML = `
+                            <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                                <div style="flex:1; min-width:240px;">
+                                    <div style="font-weight:600; margin-bottom:6px;">Original</div>
+                                    <img src="${origUrl}" alt="original" style="max-width:100%; border-radius:8px; border:1px solid #eee;">
+                                </div>
+                                <div style="flex:1; min-width:240px;">
+                                    <div style="font-weight:600; margin-bottom:6px;">Background Removed (PNG)</div>
+                                    <img src="${url}" alt="result" style="max-width:100%; border-radius:8px; border:1px solid #eee; background:checkerboard;">
+                                    <div style="margin-top:8px;">
+                                        <a href="${url}" download="removed_bg.png" class="btn btn-secondary" style="width:auto;">Download</a>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        const txt = await res.text();
+                        outRemove.innerHTML = `<div style="padding:12px; color:#e57373;">${txt || 'Invalid response'}</div>`;
+                    }
+                } catch (err) {
+                    outRemove.innerHTML = `<div style="padding:12px; color:#e57373;">${err.message || 'Server connection error'}</div>`;
+                } finally {
+                    pendingRemoveFile = null;
+                    document.getElementById('removebg-file').value = '';
+                    const panel = document.getElementById('removebg-file-panel');
+                    if (panel) panel.style.display = 'none';
+                }
+            });
+        }
+        if (removeCancel) {
+            removeCancel.addEventListener('click', () => {
+                pendingRemoveFile = null;
+                const panel = document.getElementById('removebg-file-panel');
+                if (panel) panel.style.display = 'none';
+                const nameEl = document.getElementById('removebg-file-name');
+                if (nameEl) nameEl.innerHTML = `<i class="fas fa-user"></i> Image`;
+                const th = document.getElementById('removebg-file-thumb');
+                if (th) th.src = '';
+                document.getElementById('removebg-file').value = '';
+                outRemove.innerHTML = '';
+            });
+        }
     }
 
     async function runRecolorWithBlob(blob) {
@@ -677,13 +713,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (recolorChooseImage) {
             recolorChooseImage.addEventListener('click', () => recolorFile.click());
         }
+        const recolorFileThumb = document.getElementById('recolor-file-thumb');
         recolorFile.addEventListener('change', (e) => {
             const f = e.target.files && e.target.files[0];
             if (!f) return;
             pendingRecolorFile = f;
             if (recolorFilePanel) {
-                recolorFilePanel.style.display = 'flex';
-                if (recolorFileName) recolorFileName.textContent = `Selected: ${f.name}`;
+                recolorFilePanel.style.display = 'block';
+                if (recolorFileName) recolorFileName.innerHTML = `<i class="fas fa-user"></i> Image: ${f.name}`;
+                if (recolorFileThumb) {
+                    const u = URL.createObjectURL(f);
+                    recolorFileThumb.src = u;
+                    recolorFileThumb.onload = () => URL.revokeObjectURL(u);
+                }
             }
         });
         if (recolorConfirm) {
@@ -699,7 +741,8 @@ document.addEventListener('DOMContentLoaded', () => {
             recolorCancel.addEventListener('click', () => {
                 pendingRecolorFile = null;
                 if (recolorFilePanel) recolorFilePanel.style.display = 'none';
-                if (recolorFileName) recolorFileName.textContent = '';
+                if (recolorFileName) recolorFileName.innerHTML = `<i class="fas fa-user"></i> Image`;
+                if (recolorFileThumb) recolorFileThumb.src = '';
                 recolorFile.value = '';
             });
         }
@@ -780,12 +823,45 @@ document.addEventListener('DOMContentLoaded', () => {
             showTool('upscale');
         });
         upscaleChoose.addEventListener('click', () => upscaleFile.click());
-        upscaleFile.addEventListener('change', async (e) => {
+        const upscaleFilePanel = document.getElementById('upscale-file-panel');
+        const upscaleFileThumb = document.getElementById('upscale-file-thumb');
+        const upscaleFileName = document.getElementById('upscale-file-name');
+        const upscaleConfirm = document.getElementById('upscale-confirm');
+        const upscaleCancel = document.getElementById('upscale-cancel');
+        let pendingUpscaleFile = null;
+        upscaleFile.addEventListener('change', (e) => {
             const f = e.target.files && e.target.files[0];
             if (!f) return;
-            await runUpscaleWithBlob(f);
-            upscaleFile.value = '';
+            pendingUpscaleFile = f;
+            if (upscaleFilePanel) {
+                upscaleFilePanel.style.display = 'block';
+                if (upscaleFileName) upscaleFileName.innerHTML = `<i class="fas fa-user"></i> Image: ${f.name}`;
+                if (upscaleFileThumb) {
+                    const u = URL.createObjectURL(f);
+                    upscaleFileThumb.src = u;
+                    upscaleFileThumb.onload = () => URL.revokeObjectURL(u);
+                }
+            }
         });
+        if (upscaleConfirm) {
+            upscaleConfirm.addEventListener('click', async () => {
+                if (!pendingUpscaleFile) return;
+                await runUpscaleWithBlob(pendingUpscaleFile);
+                pendingUpscaleFile = null;
+                if (upscaleFilePanel) upscaleFilePanel.style.display = 'none';
+                upscaleFile.value = '';
+            });
+        }
+        if (upscaleCancel) {
+            upscaleCancel.addEventListener('click', () => {
+                pendingUpscaleFile = null;
+                if (upscaleFilePanel) upscaleFilePanel.style.display = 'none';
+                if (upscaleFileName) upscaleFileName.innerHTML = `<i class="fas fa-user"></i> Image`;
+                if (upscaleFileThumb) upscaleFileThumb.src = '';
+                upscaleFile.value = '';
+                upscaleOut.innerHTML = '';
+            });
+        }
     }
 });
 

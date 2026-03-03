@@ -334,6 +334,16 @@
                         <div id="removebg-controls" class="tool-controls" style="display:none; margin-top:16px;">
                             <button class="btn btn-secondary" id="removebg-choose">Choose Image</button>
                         </div>
+                        <div id="removebg-file-panel" class="tool-panel">
+                            <div class="preview-row">
+                                <img id="removebg-file-thumb" class="thumb" alt="Image thumb">
+                                <span id="removebg-file-name" class="chip chip-subject"><i class="fas fa-user"></i> Image</span>
+                            </div>
+                            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+                                <button class="btn btn-primary" id="removebg-confirm">Confirm</button>
+                                <button class="btn" id="removebg-cancel" style="background:#eee;">Cancel</button>
+                            </div>
+                        </div>
                         <div id="removebg-output" style="margin-top:16px;"></div>
                         <div id="changebg-controls" class="tool-controls" style="display:none; margin-top:16px;">
                             <input type="color" id="changebg-color" value="#ffffff" title="Background color" style="width:40px; height:40px; padding:0; border:none;">
@@ -359,36 +369,45 @@
                             </div>
                         </div>
                         <div id="changebg-output" class="tool-output"></div>
-                        <div id="recolor-controls" style="display:none; margin-top:16px;">
-                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                                <input type="color" id="recolor-color" value="#ff6b6b" style="width:40px; height:40px; padding:0; border:none;">
-                                <button class="btn" id="recolor-choose" style="width:auto;">Choose Color</button>
-                                <select id="recolor-strength" style="padding:6px 8px;">
-                                    <option value="0.6">Soft</option>
-                                    <option value="0.8" selected>Normal</option>
-                                    <option value="1.0">Strong</option>
-                                </select>
-                                <button class="btn btn-secondary" id="recolor-choose-image" style="width:auto;">Choose File</button>
-                                <input type="file" id="recolor-file" accept="image/*" style="display:none;">
+                        <div id="recolor-controls" class="tool-controls" style="display:none; margin-top:16px;">
+                            <input type="color" id="recolor-color" value="#ff6b6b" style="width:40px; height:40px; padding:0; border:none;">
+                            <button class="btn" id="recolor-choose">Choose Color</button>
+                            <select id="recolor-strength" style="padding:6px 8px;">
+                                <option value="0.6">Soft</option>
+                                <option value="0.8" selected>Normal</option>
+                                <option value="1.0">Strong</option>
+                            </select>
+                            <button class="btn btn-secondary" id="recolor-choose-image">Choose File</button>
+                            <input type="file" id="recolor-file" accept="image/*" style="display:none;">
+                        </div>
+                        <div id="recolor-file-panel" class="tool-panel">
+                            <div class="preview-row">
+                                <img id="recolor-file-thumb" class="thumb" alt="Image thumb">
+                                <span id="recolor-file-name" class="chip chip-subject"><i class="fas fa-user"></i> Image</span>
                             </div>
-                            <div id="recolor-file-panel" style="display:none; margin-top:8px; padding:8px 12px; border:1px solid #eee; background:#f9fafc; border-radius:8px;">
-                                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                                    <span id="recolor-file-name" style="font-size:0.9rem; color:#333; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
-                                    <div style="display:flex; gap:8px;">
-                                        <button class="btn btn-primary" id="recolor-confirm" style="width:auto;">Confirm</button>
-                                        <button class="btn" id="recolor-cancel" style="width:auto; background:#eee;">Cancel</button>
-                                    </div>
-                                </div>
+                            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+                                <button class="btn btn-primary" id="recolor-confirm">Confirm</button>
+                                <button class="btn" id="recolor-cancel" style="background:#eee;">Cancel</button>
                             </div>
                         </div>
                         <div id="recolor-output" style="margin-top:12px;"></div>
-                        <div id="upscale-controls" style="display:none; margin-top:16px; align-items:center; gap:10px;">
+                        <div id="upscale-controls" class="tool-controls" style="display:none; margin-top:16px;">
                             <select id="upscale-scale" style="padding:6px 8px;">
                                 <option value="2" selected>2x</option>
                                 <option value="4">4x</option>
                             </select>
                             <input type="file" id="upscale-file" accept="image/*" style="display:none;">
-                            <button class="btn btn-secondary" id="upscale-choose" style="width:auto;">Choose Image</button>
+                            <button class="btn btn-secondary" id="upscale-choose">Choose Image</button>
+                        </div>
+                        <div id="upscale-file-panel" class="tool-panel">
+                            <div class="preview-row">
+                                <img id="upscale-file-thumb" class="thumb" alt="Image thumb">
+                                <span id="upscale-file-name" class="chip chip-subject"><i class="fas fa-user"></i> Image</span>
+                            </div>
+                            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
+                                <button class="btn btn-primary" id="upscale-confirm">Confirm</button>
+                                <button class="btn" id="upscale-cancel" style="background:#eee;">Cancel</button>
+                            </div>
                         </div>
                         <div id="upscale-output" style="margin-top:12px;"></div>
                     </div>
