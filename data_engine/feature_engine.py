@@ -195,9 +195,15 @@ MATERIAL_RULES: List[Tuple[str, List[str]]] = [
 ]
 
 GENDER_RULES: List[Tuple[str, List[str]]] = [
-    ("Male", ["nam", "men", "male", "boy"]),
-    ("Female", ["nu", "women", "female", "girl", "lady"]),
-    ("Unisex", ["unisex", "ca tinh"]),
+    ("Male", ["nam", "men", "male", "boy", "gentleman"]),
+    ("Female", [
+        "nu", "nư", "women", "female", "girl", "lady",
+        "dam", "vay", "croptop", "crop top", "hai day", "2 day", "yem",
+        "skirt", "dress", "jumpsuit", "blouse", "camisole", "tube top",
+        "off shoulder", "bralette", "babydoll", "peplum", "tre vai", "tay bong", "bodycon",
+        "co tim", "ren", "phoi ren", "kem no", "no", "beo", "beo gau", "xinh xan", "de thuong", "long vu", "nu tinh", "danh nu"
+    ]),
+    ("Unisex", ["unisex"]),
 ]
 
 

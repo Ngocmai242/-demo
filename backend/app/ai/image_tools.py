@@ -235,6 +235,159 @@ def _refine_alpha_mask(alpha: np.ndarray, image_bytes: bytes) -> np.ndarray:
     return refined
 
 
+def _rgb_to_hsv(arr: np.ndarray):
+    r, g, b = arr[..., 0], arr[..., 1], arr[..., 2]
+    cmax = np.max(arr, axis=-1)
+    cmin = np.min(arr, axis=-1)
+    delta = cmax - cmin + 1e-6
+    h = np.zeros_like(cmax)
+    idx = cmax == r
+    h[idx] = ((g[idx] - b[idx]) / delta[idx]) % 6.0
+    idx = cmax == g
+    h[idx] = ((b[idx] - r[idx]) / delta[idx]) + 2.0
+    idx = cmax == b
+    h[idx] = ((r[idx] - g[idx]) / delta[idx]) + 4.0
+    h = h / 6.0
+    s = delta / (cmax + 1e-6)
+    v = cmax
+    return h, s, v
+
+def _color_name_from_hsv(h: float, s: float, v: float) -> str:
+    if s < 0.12:
+        if v < 0.25:
+            return "Black"
+        if v > 0.85:
+            return "White"
+        return "Grey"
+    hh = h * 360.0
+    if (hh >= 0 and hh < 12) or (hh >= 348 and hh <= 360):
+        return "Red"
+    if hh >= 12 and hh < 40:
+        if v < 0.5:
+            return "Brown"
+        return "Orange"
+    if hh >= 40 and hh < 70:
+        return "Yellow"
+    if hh >= 70 and hh < 170:
+        return "Green"
+    if hh >= 170 and hh < 250:
+        if v < 0.35:
+            return "Navy"
+        return "Blue"
+    if hh >= 250 and hh < 290:
+        return "Purple"
+    if hh >= 290 and hh < 348:
+        return "Pink"
+    return "Multicolor"
+
+def _tone_from_name(name: str) -> str:
+    if name in ("Black", "White", "Grey", "Beige", "Cream", "Ivory"):
+        return "Neutral"
+    if name in ("Blue", "Navy", "Green", "Teal", "Olive", "Purple", "Lavender", "Sky blue", "Mint"):
+        return "Cool"
+    if name in ("Red", "Orange", "Coral", "Pink", "Burgundy", "Maroon", "Yellow", "Mustard", "Brown"):
+        return "Warm"
+    if name == "Multicolor":
+        return "Pattern"
+    return "Neutral"
+
+def detect_clothing_color(image_bytes: bytes) -> tuple[str, str]:
+    try:
+        # Use the much more reliable background removal to isolate the person
+        fg_bytes, _ = remove_background_rgba(image_bytes)
+        img = Image.open(io.BytesIO(fg_bytes)).convert("RGBA")
+        
+        # Get alpha channel as mask
+        alpha = np.array(img)[:, :, 3]
+        
+        # Convert to RGB for color analysis
+        np_img = np.array(img.convert("RGB")).astype(np.float32) / 255.0
+        
+        # Create a mask of where the person is visible
+        person_mask = alpha > 50 # Visible pixels
+        
+    except Exception as e:
+        # Fallback to original image if background removal fails
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        np_img = np.array(img).astype(np.float32) / 255.0
+        person_mask = np.ones((np_img.shape[0], np_img.shape[1]), dtype=bool)
+
+    h, w = np_img.shape[:2]
+    hh, ss, vv = _rgb_to_hsv(np_img)
+
+    # --- Skin detection (remains the same, but applied to a cleaner image) ---
+    y_plane = 0.299 * np_img[..., 0] + 0.587 * np_img[..., 1] + 0.114 * np_img[..., 2]
+    cr = (np_img[..., 0] - y_plane) * 0.713 + 0.5
+    cb = (np_img[..., 2] - y_plane) * 0.564 + 0.5
+    
+    from scipy.ndimage import binary_dilation, binary_closing, label, binary_fill_holes
+    
+    skin_ycbcr = (cr >= 0.30) & (cr <= 0.68) & (cb >= 0.28) & (cb <= 0.62) & (vv >= 0.25)
+    skin_hsv = (hh >= 0.0) & (hh <= (50.0/360.0)) & (ss >= 0.10) & (ss <= 0.75) & (vv >= 0.35)
+    skin = (skin_ycbcr | skin_hsv) & (ss >= 0.10)
+    
+    # --- Clothing mask generation (improved) ---
+    
+    # Define clothing as part of the person, but not skin
+    # Dilate skin mask slightly to create a buffer zone
+    skin_expanded = binary_dilation(skin, iterations=3)
+    
+    # We remove the aggressive 'colorish' constraint here so we can find black/white/gray clothes
+    clothing_mask = person_mask & (~skin_expanded)
+    
+    # Clean up the mask: remove small noise and fill holes
+    clothing_mask = binary_closing(clothing_mask, iterations=2)
+    clothing_mask = binary_fill_holes(clothing_mask)
+
+    # Find the largest connected component (largest piece of clothing)
+    labeled, n = label(clothing_mask)
+    if n > 0:
+        sizes = np.bincount(labeled.ravel())
+        if len(sizes) > 1:
+            largest_component_id = np.argmax(sizes[1:]) + 1
+            clothing_mask = labeled == largest_component_id
+
+    # --- Color Analysis (improved) ---
+    # If the detected clothing area is very small or not found, fallback to center of person
+    if clothing_mask.sum() < 500:
+        center_mask = np.zeros_like(person_mask)
+        center_mask[h//4:3*h//4, w//4:3*w//4] = True
+        final_mask = person_mask & center_mask & (~skin)
+        if final_mask.sum() < 200:
+            final_mask = person_mask & (~skin)
+    else:
+        final_mask = clothing_mask
+
+    # If even after fallback we have very little data, use the whole person area
+    if final_mask.sum() < 100:
+        final_mask = person_mask if person_mask.sum() > 0 else np.ones_like(person_mask, dtype=bool)
+
+    # Calculate mean color
+    mask_pixels = np_img[final_mask]
+    if mask_pixels.shape[0] > 0:
+        mean_color = np.mean(mask_pixels, axis=0)
+    else:
+        mean_color = np.array([0.5, 0.5, 0.5]) # Safe fallback
+
+    # Check if there's a strong chromatic component anyway, even if mean is boring
+    # (Helps with patterned shirts)
+    if mask_pixels.shape[0] > 100:
+        # Check standard deviation of hue, saturation, and value to detect patterns (Multicolor)
+        s_vals = ss[final_mask]
+        v_vals = vv[final_mask]
+        h_vals = hh[final_mask]
+        
+        # High variance in S, V or H usually means a pattern (stripes, caro, floral)
+        if np.std(s_vals) > 0.18 or np.std(v_vals) > 0.18 or np.std(h_vals) > 0.15:
+            return "Multicolor", "Pattern"
+
+    # Convert the mean color to HSV and get the color name
+    mh, ms, mv = _rgb_to_hsv(mean_color.reshape(1, 1, 3))
+    cname = _color_name_from_hsv(float(mh[0,0]), float(ms[0,0]), float(mv[0,0]))
+    
+    return cname, _tone_from_name(cname)
+
+
 def recolor_clothing(image_bytes: bytes, hex_color: str, strength: float = 0.8) -> Tuple[bytes, str]:
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     np_img = np.array(img).astype(np.float32) / 255.0

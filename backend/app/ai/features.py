@@ -45,12 +45,14 @@ def estimate_gender(ratios):
     def _nz(x): 
         return x if x > 0 else 0.0
     # Shoulder-dominant and waist not extremely small -> more likely Male
-    if shoulder_dom > 0.06 and w >= (min(s, h) * 0.80):
-        conf = min(0.95, 0.6 + _nz(shoulder_dom - 0.05) * 5.0 + _nz(w - min(s, h) * 0.80) * 3.0)
+    # Increased threshold from 0.06 to 0.08 for better female recognition
+    if shoulder_dom > 0.08 and w >= (min(s, h) * 0.82):
+        conf = min(0.95, 0.6 + _nz(shoulder_dom - 0.07) * 4.0 + _nz(w - min(s, h) * 0.82) * 2.0)
         return "Male", round(conf, 3)
-    # Hip-dominant and waist relatively smaller -> more likely Female
-    if hip_dom > 0.03 and w <= (min(s, h) * 0.95):
-        conf = min(0.95, 0.6 + _nz(hip_dom - 0.05) * 5.0 + _nz((min(s, h) * 0.95) - w) * 3.0)
+    # Hip-dominant or balanced with slightly larger hips -> more likely Female
+    # Relaxed hip dominance for female
+    if hip_dom > 0.01 and w <= (min(s, h) * 0.98):
+        conf = min(0.95, 0.6 + _nz(hip_dom) * 6.0 + _nz((min(s, h) * 0.98) - w) * 2.0)
         return "Female", round(conf, 3)
     # Otherwise uncertain
     return "Uncertain", 0.5

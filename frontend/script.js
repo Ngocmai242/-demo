@@ -2,7 +2,78 @@
 const API_URL = window.APP_CONFIG.getApiUrl();
 const BACKEND_URL = window.APP_CONFIG.getBackendUrl();
 
+// Global AI State
+window.LAST_BODY_SHAPE = null;
+window.LAST_DETECTED_GENDER = 'Unisex';
+window.SELECTED_PRODUCT_FOR_AI = null;
+
 console.log('Using API URL:', API_URL);
+
+// ----------------------------------------------------------------------------------
+// LAYER 0: GLOBAL DETECTOR & CONFIG
+// ----------------------------------------------------------------------------------
+let bodyDetector = null;
+let faceModelsLoaded = false;
+
+async function initFaceDetector() {
+    if (faceModelsLoaded) return true;
+    try {
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+        await faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL);
+        faceModelsLoaded = true;
+        console.log("Face-API Gender Models Loaded");
+        return true;
+    } catch (e) {
+        console.error("Failed to load Face Detector:", e);
+        return false;
+    }
+}
+
+async function initPoseDetector() {
+    if (bodyDetector) return bodyDetector;
+    try {
+        const model = poseDetection.SupportedModels.MoveNet;
+        const detectorConfig = {
+            modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER,
+            enableSmoothing: true
+        };
+        bodyDetector = await poseDetection.createDetector(model, detectorConfig);
+        console.log("MoveNet Thunder Initialized (Client-side)");
+        return bodyDetector;
+    } catch (e) {
+        console.error("Failed to load Pose Detector:", e);
+        return null;
+    }
+}
+
+/**
+ * CROP FACE UTILITY
+ * Crops the face area from full body image based on nose/ear keypoints.
+ */
+function cropFaceFromKeypoints(img, kp) {
+    const k = {}; 
+    kp.forEach(p => k[p.name] = p);
+    
+    // Check if we have the head keypoints
+    if (!k.nose || !k.left_ear || !k.right_ear) return null;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Calculate face size based on ear distance
+    const earDist = Math.sqrt(Math.pow(k.left_ear.x - k.right_ear.x, 2) + Math.pow(k.left_ear.y - k.right_ear.y, 2));
+    const faceSize = earDist * 2.5;
+    
+    const x = k.nose.x - faceSize / 2;
+    const y = k.nose.y - faceSize / 2;
+    
+    canvas.width = 160;
+    canvas.height = 160;
+    
+    ctx.drawImage(img, x, y, faceSize, faceSize, 0, 0, 160, 160);
+    return canvas;
+}
 
 // Helper to get full image URL
 function getImageUrl(path) {
@@ -15,6 +86,12 @@ function getImageUrl(path) {
         return `${BACKEND_URL}${path}`;
     }
     return path;
+}
+
+// Helper to scroll to section
+function scrollToSection(id) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Helper to construct Avatar URL with cache busting
@@ -102,14 +179,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const data = await res.json();
 
-                // User portal: DO NOT allow Admin accounts to login here
+                // Redirect based on role
                 if (data.role === 'ADMIN') {
-                    alert('Access Denied: Please use the Admin Login page.');
-                    return;
+                    alert('Admin login detected. Redirecting to Admin Dashboard...');
+                    localStorage.setItem('user', JSON.stringify(data));
+                    window.location.href = 'admin_index.html';
+                } else {
+                    alert('Login Success! Redirecting...');
+                    localStorage.setItem('user', JSON.stringify(data));
+                    window.location.href = 'index.html';
                 }
-                alert('Login Success! Redirecting...');
-                localStorage.setItem('user', JSON.stringify(data));
-                window.location.href = 'index.html';
 
             } catch (err) {
                 console.error(err);
@@ -455,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Helpers for Shop dropdown
     async function ensureShopReady() {
         scrollToSection('shop');
-        try { await loadShopItems(); } catch(e) {}
+        try { await loadShopItems(); } catch (e) { }
         return new Promise((resolve) => {
             let tries = 0;
             const timer = setInterval(() => {
@@ -900,29 +979,6 @@ function populateDateDropdowns() {
     addOps(yearSelect, 1920, new Date().getFullYear(), true);
 }
 
-async function submitBodyAnalysis() {
-    const input = document.getElementById('body-image');
-    const out = document.getElementById('body-result');
-    if (!input || !input.files || input.files.length === 0) {
-        out.textContent = 'Please choose an image.';
-        return;
-    }
-    const fd = new FormData();
-    fd.append('image', input.files[0]);
-    try {
-        const res = await fetch(`${API_URL}/analyze-proportion`, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
-        const ct = res.headers.get('content-type') || '';
-        const data = ct.includes('application/json') ? await res.json() : { message: await res.text() };
-        if (!res.ok) {
-            out.textContent = data.message || 'Error';
-            return;
-        }
-        out.innerText = '';
-        out.innerHTML = formatAnalyzeHTML(data);
-    } catch (e) {
-        out.textContent = e.message;
-    }
-}
 
 async function submitBodyShape() {
     const input = document.getElementById('body-image');
@@ -931,21 +987,276 @@ async function submitBodyShape() {
         out.textContent = 'Please choose an image.';
         return;
     }
-    const fd = new FormData();
-    fd.append('image', input.files[0]);
+
+    // Show Loading Spinner (Layer 1 Start)
+    out.innerHTML = `
+        <div style="background:white; border-radius:15px; padding:30px; text-align:center; box-shadow:0 4px 15px rgba(0,0,0,0.05);">
+            <div class="loading-spinner">
+                <i class="fas fa-microchip fa-spin" style="font-size:3rem; color:var(--pastel-blue-dark); margin-bottom:15px;"></i>
+                <p id="loading-step-text" style="font-weight:600; color:#444;">LAYER 1: Pose Detection (MoveNet Thunder)...</p>
+                <p style="font-size:0.85rem; color:#888;">Detecting keypoints to find face area...</p>
+            </div>
+        </div>
+    `;
+
     try {
-        const res = await fetch(`${API_URL}/identify-body-shape`, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
-        const ct = res.headers.get('content-type') || '';
-        const data = ct.includes('application/json') ? await res.json() : { message: await res.text() };
-        if (!res.ok) {
-            out.textContent = data.message || 'Error';
-            return;
+        const loadingText = document.getElementById('loading-step-text');
+
+        // Create Image Object
+        const img = new Image();
+        img.src = URL.createObjectURL(input.files[0]);
+        await new Promise((resolve) => (img.onload = resolve));
+
+        // LAYER 1: POSE DETECTION (CLIENT-SIDE)
+        const detector = await initPoseDetector();
+        if (!detector) throw new Error("Could not initialize AI Engine. Please check internet connection.");
+
+        const poses = await detector.estimatePoses(img);
+        if (!poses || poses.length === 0) throw new Error("No body pose detected. Please ensure you are visible from head to toe.");
+        const keypoints = poses[0].keypoints;
+
+        let detectedGender = "Female";
+        let genderProb = 0;
+
+        // LAYER 2: GENDER DETECTION TỪ KHUÔN MẶT (CROP FIRST)
+        if (loadingText) loadingText.innerText = "LAYER 2: Gender Detection (Face-API with Crop)...";
+        const genderSelect = document.getElementById('gender-select');
+        if (genderSelect && genderSelect.value !== 'auto') {
+            detectedGender = genderSelect.value.charAt(0).toUpperCase() + genderSelect.value.slice(1);
+            genderProb = 1.0;
+        } else {
+            const faceCanvas = cropFaceFromKeypoints(img, keypoints);
+            if (faceCanvas) {
+                await initFaceDetector();
+                const detections = await faceapi.detectSingleFace(faceCanvas).withAgeAndGender();
+                if (detections) {
+                    detectedGender = detections.gender.charAt(0).toUpperCase() + detections.gender.slice(1);
+                    genderProb = detections.genderProbability;
+                    console.log(`Face-API Gender: ${detectedGender} (${Math.round(genderProb*100)}%)`);
+                }
+            }
+            
+            // Fallback or low confidence handling
+            if (genderProb < 0.65) {
+                console.warn("Face detection failed or low confidence. Falling back to Female.");
+                detectedGender = "Female";
+                genderProb = 0.5;
+            }
         }
-        out.innerText = '';
-        out.innerHTML = formatIdentifyHTML(data);
+
+        // LAYER 3: BODY SHAPE CLASSIFICATION
+        if (loadingText) loadingText.innerText = "LAYER 3: Shape Classification (Proportion Engine)...";
+        const analysis = runProportionEngine(keypoints, img.height, detectedGender);
+        analysis.genderProb = genderProb;
+        
+        // LAYER 4: CLAUDE SONNET SYNTHESIS
+        if (loadingText) loadingText.innerText = "LAYER 4: Styling Synthesis (GenAI Logic)...";
+        const stylistData = generateStylistReport(analysis);
+        
+        // Sync with global state
+        window.LAST_BODY_SHAPE = analysis.shape;
+        window.LAST_DETECTED_GENDER = analysis.genderLabel;
+        
+        // Update UI Selectors
+        const shapeSelect = document.getElementById('ai-body-shape') || document.getElementById('tryon-shape-manual');
+        if (shapeSelect) shapeSelect.value = analysis.shape;
+
+        // Render Final Report
+        out.innerHTML = renderAdvancedBodyReport(stylistData, analysis);
+        
+        // Final Sync for other modules
+        const tryonGenderSelect = document.getElementById('tryon-gender');
+        if (tryonGenderSelect) tryonGenderSelect.value = analysis.genderLabel;
+
     } catch (e) {
-        out.textContent = e.message;
+        console.error(e);
+        out.innerHTML = `
+            <div style="background:#fff5f5; border:1px solid #ffcfcf; border-radius:15px; padding:20px; color:#c62828;">
+                <i class="fas fa-exclamation-triangle"></i> AI Engine Error: ${e.message}
+            </div>
+        `;
     }
+}
+
+/**
+ * LAYER 2: PROPORTION ENGINE
+ * Uses 17 MoveNet keypoints to calculate specific body metrics.
+ */
+function runProportionEngine(kp, imgHeight, genderLabel = "Female") {
+    const k = {}; 
+    kp.forEach(p => k[p.name] = p);
+
+    const dist = (p1, p2) => Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+    
+    // Core Metrics (Normalized to Image Height for scale invariance)
+    const sw = dist(k.left_shoulder, k.right_shoulder) / imgHeight;
+    const hw = dist(k.left_hip, k.right_hip) / imgHeight;
+    
+    // Estimate Waist (Midpoint of Torso)
+    const torsoMidY = (k.left_shoulder.y + k.left_hip.y) / 2;
+    const ww = ((sw + hw) / 2) * 0.85; 
+
+    const torsoH = (k.left_hip.y - k.left_shoulder.y) / imgHeight;
+    const legL = (k.left_ankle.y - k.left_hip.y) / imgHeight;
+
+    // Ratios
+    const wr_ratio = ww / hw; // Waist to Hip
+    const sh_ratio = sw / hw; // Shoulder to Hip
+    
+    // Logic for Shape Detection (Using external gender)
+    let shape = "Rectangle";
+    let confidence = 0.7;
+
+    if (sh_ratio > 1.08) {
+        shape = "Inverted Triangle";
+        confidence = Math.min(0.9, 0.6 + (sh_ratio - 1.08) * 2);
+    } else if (sh_ratio < 0.92) {
+        shape = "Pear";
+        confidence = Math.min(0.9, 0.6 + (0.92 - sh_ratio) * 3);
+    } else if (wr_ratio < 0.75) {
+        shape = "Hourglass";
+        confidence = Math.min(0.95, 0.6 + (0.75 - wr_ratio) * 4);
+    } else if (sh_ratio >= 0.92 && sh_ratio <= 1.08 && wr_ratio > 0.75) {
+        shape = (genderLabel === "Male") ? "Rectangle" : "Apple";
+        confidence = 0.8;
+    }
+
+    return {
+        sw: sw.toFixed(3),
+        hw: hw.toFixed(3),
+        ww: ww.toFixed(3),
+        leg: legL.toFixed(3),
+        sh_ratio: sh_ratio.toFixed(2),
+        wr_ratio: wr_ratio.toFixed(2),
+        shape: shape,
+        genderLabel: genderLabel,
+        confidence: confidence,
+        metrics: {
+            shoulder: sw,
+            hip: hw,
+            waist: ww,
+            leg: legL
+        }
+    };
+}
+
+/**
+ * LAYER 3: OUTFIT SYNTHESIS (CLAUDE-LEVEL GENERATION)
+ */
+function generateStylistReport(analysis) {
+    const { shape, genderLabel } = analysis;
+    
+    const strategies = {
+        "Hourglass": {
+            strengths: "Balanced shoulders and hips with a defined waistline.",
+            goals: "Maintain balance and highlight the natural curves.",
+            dos: ["Wrap dresses", "High-waisted styles", "Belted jackets", "V-necklines"],
+            donts: ["Oversized styles", "Shapeless sacks", "Empire waists that hide curves"],
+            advice: "Your proportions are naturally balanced. Choose fabrics that follow your silhouette rather than masking it."
+        },
+        "Pear": {
+            strengths: "Well-defined waist and elegant hip curves.",
+            goals: "Draw attention to the upper body to balance wider hips.",
+            dos: ["Boat necks", "Statement collars", "A-line skirts", "Structured shoulders"],
+            donts: ["Tight low-rise jeans", "Boxy heavy tops", "Skinny jeans that taper sharply"],
+            advice: "Focus on adding volume or detail to your upper half. This creates a more balanced X-shaped silhouette."
+        },
+        "Inverted Triangle": {
+            strengths: "Strong, athletic shoulder line and slender legs.",
+            goals: "Add volume to the lower half to balance the shoulders.",
+            dos: ["Wide-leg pants", "Full skirts", "Deep V-necks", "Raglan sleeves"],
+            donts: ["Shoulder pads", "Boat necks", "Tapered skinny pants"],
+            advice: "Keep your upper half clean and simple, use the lower half of your outfit to build width and volume."
+        },
+        "Rectangle": {
+            strengths: "Symmetrical silhouette and lean proportions.",
+            goals: "Create the illusion of curves and define the waist.",
+            dos: ["Peplum tops", "Tiered skirts", "Cut-out dresses", "Belts over blazers"],
+            donts: ["Straight-cut dresses", "Vertical stripes", "Minimalist boxy looks"],
+            advice: "Use volume and texture on both top and bottom to create contrast against a cinched waist."
+        },
+        "Apple": {
+            strengths: "Slender limbs and elegant bust line.",
+            goals: "Elongate the torso and highlight legs.",
+            dos: ["Empire waists", "Tunic tops", "Short skirts", "Open cardigans"],
+            donts: ["Belted waists", "Heavy textures at midsection", "Tucked-in shirts"],
+            advice: "Draw the eye vertically. V-necks and longer necklaces help create an elongated, leaner appearance."
+        }
+    };
+
+    const data = strategies[shape] || strategies["Rectangle"];
+    
+    return {
+        ...data,
+        title: `AI Specialist: ${shape} Silhouette Analysis`,
+        summary: `Our AI detection (Layer 1-2) identifies a ${shape} profile for a ${genderLabel} silhouette. Here is your personalized styling roadmap.`
+    };
+}
+
+function renderAdvancedBodyReport(stylist, analysis) {
+    const { dos, donts, strengths, goals, advice, summary, title } = stylist;
+    const { metrics, confidence, genderLabel, shape, genderProb } = analysis;
+    const genderConfStr = genderProb ? ` (Face: ${Math.round(genderProb*100)}%)` : '';
+
+    return `
+    <div style="background:#fffafb; border:2px solid var(--pastel-pink-light); border-radius:15px; padding:25px; text-align:left; box-shadow: 0 10px 30px rgba(0,0,0,0.06); animation: fadeIn 0.5s ease-out;">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ffeef2; padding-bottom:15px; margin-bottom:20px;">
+            <h3 style="margin:0; color:var(--pastel-pink-dark);"><i class="fas fa-magic"></i> ${title}</h3>
+            <span style="background:var(--pastel-blue-dark); color:white; padding:4px 12px; border-radius:20px; font-size:0.75rem;">Shape Confidence: ${Math.round(confidence*100)}%</span>
+        </div>
+
+        <p style="font-size:0.95rem; color:#666; font-style:italic; margin-bottom:25px;">${summary}</p>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:25px; margin-bottom:25px;">
+            <!-- Key Metrics -->
+            <div style="background:white; padding:15px; border-radius:12px; border:1px solid #f9f9f9;">
+                <h4 style="margin-top:0; color:#444; font-size:0.9rem; text-transform:uppercase;"><i class="fas fa-ruler-horizontal"></i> Anatomy Proportions</h4>
+                <ul style="list-style:none; padding:0; font-size:0.85rem; color:#666; line-height:1.8;">
+                    <li style="display:flex; justify-content:space-between;"><span>Gender:</span> <strong>${genderLabel}${genderConfStr}</strong></li>
+                    <li style="display:flex; justify-content:space-between;"><span>Shoulder Width:</span> <strong>${analysis.sw}</strong></li>
+                    <li style="display:flex; justify-content:space-between;"><span>Hip Width:</span> <strong>${analysis.hw}</strong></li>
+                    <li style="display:flex; justify-content:space-between;"><span>Shoulder/Hip Ratio:</span> <strong>${analysis.sh_ratio}</strong></li>
+                </ul>
+            </div>
+            <!-- Strengths -->
+            <div style="background:white; padding:15px; border-radius:12px; border:1px solid #f9f9f9;">
+                <h4 style="margin-top:0; color:#444; font-size:0.9rem; text-transform:uppercase;"><i class="fas fa-star"></i> Core Strengths</h4>
+                <p style="font-size:0.85rem; color:#666; margin:0;">${strengths}</p>
+                <div style="margin-top:10px; padding-top:10px; border-top:1px dashed #eee;">
+                    <strong>Primary Goal:</strong> <span style="font-size:0.85rem; color:#666;">${goals}</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:25px; margin-bottom:25px;">
+            <!-- Do's -->
+            <div style="background:#f0fff4; padding:15px; border-radius:12px; border:1px solid #dcfce7;">
+                <h4 style="margin-top:0; color:#166534; font-size:0.9rem;"><i class="fas fa-check-circle"></i> Best Fits (Wear)</h4>
+                <ul style="margin:0; padding-left:20px; font-size:0.85rem; color:#166534;">
+                    ${dos.map(item => `<li>${item}</li>`).join('')}
+                </ul>
+            </div>
+            <!-- Dont's -->
+            <div style="background:#fff1f2; padding:15px; border-radius:12px; border:1px solid #ffe4e6;">
+                <h4 style="margin-top:0; color:#9f1239; font-size:0.9rem;"><i class="fas fa-times-circle"></i> Challenges (Avoid)</h4>
+                <ul style="margin:0; padding-left:20px; font-size:0.85rem; color:#9f1239;">
+                    ${donts.map(item => `<li>${item}</li>`).join('')}
+                </ul>
+            </div>
+        </div>
+
+        <div style="background:white; padding:20px; border-radius:12px; border-left:4px solid var(--pastel-pink);">
+            <h4 style="margin-top:0; color:#444;">Stylist's Final Advice</h4>
+            <p style="font-size:0.95rem; color:#555; margin:0; line-height:1.6;">"${advice}"</p>
+        </div>
+
+        <div style="margin-top:25px; display:flex; justify-content:center;">
+             <button class="btn btn-primary" onclick="scrollToSection('tryon')" style="width:auto; padding:12px 40px; font-weight:700; border-radius:30px; background:linear-gradient(135deg, var(--pastel-pink-dark), var(--pastel-blue-dark));">
+                Try AI Outfits for my ${shape} Shape <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+    </div>
+    `;
 }
 async function checkUserSession() {
     // Port check moved to global scope
@@ -954,15 +1265,21 @@ async function checkUserSession() {
     const userStr = localStorage.getItem('user');
     const userMenu = document.getElementById('user-menu');
 
+    const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+    const isAdminPage = currentPage.startsWith('admin_');
+
     // 2. Logic for Guest or Not Logged In
     if (!userStr) {
         if (userMenu) {
             userMenu.innerHTML = '<a href="login.html" class="btn-bubble-pink">Login</a>';
         }
-        // Don't redirect to login.html here so users can browse landing page if they want (optional, but good UX)
-        // If strict login required: window.location.replace('login.html');
-        // For now, let's strictly redirect if not on auth page (current logic expects login)
-        window.location.replace('login.html');
+        // Redirect to appropriate login page
+        if (isAdminPage) {
+            window.location.replace('admin_login.html');
+        } else if (currentPage !== 'index.html') {
+            // For user pages, redirect to login
+            window.location.replace('login.html');
+        }
         return;
     }
 
@@ -971,19 +1288,20 @@ async function checkUserSession() {
     // 3. Check if user is Guest
     if (user.id === 'guest' || user.username === 'guest') {
         if (userMenu) {
-            // Show "Log In" button instead of Avatar for Guests
             userMenu.innerHTML = '<a href="login.html" class="btn-bubble-pink">Login</a>';
         }
-        // Allow guest to stay on page
+        // Guest should NOT be on admin pages
+        if (isAdminPage) {
+            window.location.replace('admin_login.html');
+            return;
+        }
         loadShopItems();
         initCarousel();
         return;
     }
 
     // 4. Normal Authenticated User Verification
-    const currentPage = window.location.pathname.split('/').pop();
-
-    if (user.role !== 'ADMIN' && currentPage === 'admin_index.html') {
+    if (user.role !== 'ADMIN' && isAdminPage) {
         alert('Access Denied: Admin Rights Required');
         window.location.replace('index.html');
         return;
@@ -1123,109 +1441,6 @@ function recsFor(shape, gender) {
     return bank[shape] || [];
 }
 
-function formatAnalyzeNarrative(r) {
-    const s = _round(r.shoulder_ratio || 0);
-    const w = _round(r.waist_ratio || 0);
-    const h = _round(r.hip_ratio || 0);
-    const l = _round(r.leg_ratio || 0);
-    const gender = getPreferredGender(r);
-    const shape = guessShapeFromRatios(r);
-    const name = humanShapeName(shape);
-    const notes = [];
-    if (s > h + 0.02) notes.push('Shoulders are wider than hips');
-    else if (h > s + 0.02) notes.push('Hips are wider than shoulders');
-    else notes.push('Shoulders and hips are balanced');
-    if (w < Math.min(s, h) * 0.85) notes.push('Defined waist');
-    if (l > 0.5) notes.push('Long leg proportion');
-    const rs = recsFor(shape, gender === 'Uncertain' ? 'Female' : gender);
-    const gline = gender === 'Uncertain' ? 'Estimated gender: Uncertain (you can set it above)' : `Estimated gender: ${gender}`;
-    const header = `Body Proportions Summary\nLikely shape: ${name}\n${gline}`;
-    const ratios = `Key ratios:\n- Shoulder-to-Height: ${s}\n- Waist-to-Height: ${w}\n- Hip-to-Height: ${h}\n- Leg-to-Height: ${l}`;
-    const obs = `Observations:\n- ${notes.join('\n- ')}`;
-    const rec = rs.length ? `Recommended outfits:\n- ${rs.join('\n- ')}` : `Recommended outfits:\n- Choose well-fitted pieces, balance shoulder–hip, lightly define the waist`;
-    return [header, ratios, obs, rec].join('\n\n');
-}
-
-function formatIdentifyNarrative(data) {
-    const r = data.ratios || {};
-    const s = _round(r.shoulder_ratio || 0);
-    const w = _round(r.waist_ratio || 0);
-    const h = _round(r.hip_ratio || 0);
-    const l = _round(r.leg_ratio || 0);
-    const shape = data.body_shape || guessShapeFromRatios(r);
-    const name = humanShapeName(shape);
-    const conf = typeof data.confidence === 'number' ? Math.round(data.confidence * 100) : null;
-    const userPref = getPreferredGender(r);
-    const gender = userPref !== 'Uncertain' ? userPref : (data.gender || 'Uncertain');
-    const rs = recsFor(shape, gender === 'Uncertain' ? 'Female' : gender);
-    const header = conf !== null ? `Body shape: ${name} (confidence ~${conf}%)` : `Body shape: ${name}`;
-    const gconf = typeof data.gender_confidence === 'number' ? ` (~${Math.round(data.gender_confidence * 100)}%)` : '';
-    const gline = gender === 'Uncertain'
-        ? 'Estimated gender: Uncertain (you can set it above)'
-        : `Estimated gender: ${gender}${userPref !== 'Uncertain' ? ' (selected)' : gconf}`;
-    const ratios = `Key ratios:\n- Shoulder-to-Height: ${s}\n- Waist-to-Height: ${w}\n- Hip-to-Height: ${h}\n- Leg-to-Height: ${l}`;
-    const rec = rs.length ? `Recommended outfits:\n- ${rs.join('\n- ')}` : `Recommended outfits:\n- Choose well-fitted pieces, balance shoulder–hip, lightly define the waist`;
-    const src = data.source ? `Prediction source: ${data.source === 'ml' ? 'ML model' : data.source.replace('_', ' ')}` : '';
-    return [header, gline, ratios, rec, src].filter(Boolean).join('\n\n');
-}
-
-function formatAnalyzeHTML(data) {
-    const r = data.ratios || data || {};
-    const s = _round(r.shoulder_ratio || 0);
-    const w = _round(r.waist_ratio || 0);
-    const h = _round(r.hip_ratio || 0);
-    const l = _round(r.leg_ratio || 0);
-    const userPref = getPreferredGender(r);
-    const gender = userPref !== 'Uncertain' ? userPref : (data.gender || 'Uncertain');
-    const gconf = userPref !== 'Uncertain'
-        ? ' (selected)'
-        : (typeof data.gender_confidence === 'number' ? ` (~${Math.round(data.gender_confidence * 100)}%)` : '');
-    const shape = guessShapeFromRatios(r);
-    const name = humanShapeName(shape);
-    const notes = [];
-    if (s > h + 0.02) notes.push('Shoulders are wider than hips');
-    else if (h > s + 0.02) notes.push('Hips are wider than shoulders');
-    else notes.push('Shoulders and hips are balanced');
-    if (w < Math.min(s, h) * 0.85) notes.push('Defined waist');
-    if (l > 0.5) notes.push('Long leg proportion');
-    const rs = recsFor(shape, gender === 'Uncertain' ? 'Female' : gender);
-    const recLis = rs.map(x => `<li>${x}</li>`).join('');
-    const obsLis = notes.map(x => `<li>${x}</li>`).join('');
-    return `
-    <div style="background:#fff; border:1px solid #eee; border-radius:12px; padding:16px; text-align:left;">
-      <div style="display:flex; gap:12px; flex-wrap:wrap;">
-        <div style="flex:1; min-width:240px;">
-          <div style="font-weight:600; margin-bottom:6px;">Body shape</div>
-          <div>${name}</div>
-        </div>
-        <div style="flex:1; min-width:240px;">
-          <div style="font-weight:600; margin-bottom:6px;">Estimated gender</div>
-          <div>${gender}${gconf}</div>
-        </div>
-      </div>
-      <hr style="border:none; border-top:1px solid #eee; margin:12px 0;">
-      <div style="display:flex; gap:12px; flex-wrap:wrap;">
-        <div style="flex:1; min-width:240px;">
-          <div style="font-weight:600; margin-bottom:6px;">Key ratios</div>
-          <ul style="margin:0; padding-left:18px;">
-            <li>Shoulder-to-Height: ${s}</li>
-            <li>Waist-to-Height: ${w}</li>
-            <li>Hip-to-Height: ${h}</li>
-            <li>Leg-to-Height: ${l}</li>
-          </ul>
-        </div>
-        <div style="flex:1; min-width:240px;">
-          <div style="font-weight:600; margin-bottom:6px;">Observations</div>
-          <ul style="margin:0; padding-left:18px;">${obsLis}</ul>
-        </div>
-      </div>
-      <hr style="border:none; border-top:1px solid #eee; margin:12px 0;">
-      <div>
-        <div style="font-weight:600; margin-bottom:6px;">Recommended outfits</div>
-        <ul style="margin:0; padding-left:18px;">${recLis || '<li>Choose well-fitted pieces, balance shoulder–hip, lightly define the waist</li>'}</ul>
-      </div>
-    </div>`;
-}
 
 function formatIdentifyHTML(data) {
     const r = data.ratios || {};
@@ -1236,42 +1451,115 @@ function formatIdentifyHTML(data) {
     const shape = data.body_shape || guessShapeFromRatios(r);
     const name = humanShapeName(shape);
     const conf = typeof data.confidence === 'number' ? ` (~${Math.round(data.confidence * 100)}%)` : '';
+    
+    // Update Global Selection & Sync
+    window.LAST_BODY_SHAPE = name.split(' ')[0]; 
+    window.LAST_DETECTED_GENDER = data.gender || 'Female';
+    
+    // Sync other selectors for consistency
+    const shapeSelect = document.getElementById('ai-body-shape');
+    if (shapeSelect) shapeSelect.value = window.LAST_BODY_SHAPE;
+    
+    const tryonShapeSelect = document.getElementById('tryon-shape-manual');
+    if (tryonShapeSelect) tryonShapeSelect.value = window.LAST_BODY_SHAPE;
+    
+    const tryonGenderSelect = document.getElementById('tryon-gender');
+    if (tryonGenderSelect) tryonGenderSelect.value = window.LAST_DETECTED_GENDER;
+
     const userPref = getPreferredGender(r);
     const gender = userPref !== 'Uncertain' ? userPref : (data.gender || 'Uncertain');
     const gconf = userPref !== 'Uncertain'
         ? ' (selected)'
         : (typeof data.gender_confidence === 'number' ? ` (~${Math.round(data.gender_confidence * 100)}%)` : '');
+    
+    const notes = [];
+    if (s > h + 0.02) notes.push('Shoulders are wider than hips');
+    else if (h > s + 0.02) notes.push('Hips are wider than shoulders');
+    else notes.push('Shoulders and hips are balanced');
+    if (w < Math.min(s, h) * 0.85) notes.push('Defined waist');
+    if (l > 0.5) notes.push('Long leg proportion');
+    
     const rs = recsFor(shape, gender === 'Uncertain' ? 'Female' : gender);
     const recLis = rs.map(x => `<li>${x}</li>`).join('');
-    return `
-    <div style="background:#fff; border:1px solid #eee; border-radius:12px; padding:16px; text-align:left;">
-      <div style="display:flex; gap:12px; flex-wrap:wrap;">
-        <div style="flex:1; min-width:240px;">
-          <div style="font-weight:600; margin-bottom:6px;">Body shape</div>
-          <div>${name}${conf}</div>
+    const obsLis = notes.map(x => `<li>${x}</li>`).join('');
+
+    const adv = data.advanced_analysis || null;
+    let advHTML = '';
+    if (adv && adv.measurements) {
+        const m = adv.measurements;
+        advHTML = `
+        <div style="margin-top:15px; background:linear-gradient(135deg, #f0f7ff, #fff); padding:15px; border-radius:12px; border:1px solid #d0e7ff;">
+          <div style="font-weight:700; color:var(--pastel-blue-dark); margin-bottom:8px; font-size:0.9rem; display:flex; align-items:center; gap:6px;">
+            <i class="fas fa-cube"></i> Advanced 3D Measurements (SMPL)
+          </div>
+          <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:10px;">
+            <div style="font-size:0.85rem;"><strong>Shoulder:</strong> ${m.shoulder} cm</div>
+            <div style="font-size:0.85rem;"><strong>Chest:</strong> ${m.chest} cm</div>
+            <div style="font-size:0.85rem;"><strong>Waist:</strong> ${m.waist} cm</div>
+            <div style="font-size:0.85rem;"><strong>Hip:</strong> ${m.hip} cm</div>
+          </div>
         </div>
-        <div style="flex:1; min-width:240px;">
-          <div style="font-weight:600; margin-bottom:6px;">Estimated gender</div>
-          <div>${gender}${gconf}</div>
+        `;
+    }
+
+    let llmHTML = '';
+    if (data.style_recommendations) {
+        const recs = data.style_recommendations.recommendations || [];
+        const items = recs.map(r => `<div style="margin-bottom:10px;"><strong>${r.title}:</strong> <span style="font-size:0.85rem; color:#666;">${r.reason}</span></div>`).join('');
+        const raw = data.style_recommendations.raw_text ? `<p style="font-size:0.85rem; color:#666;">${data.style_recommendations.raw_text}</p>` : '';
+        
+        llmHTML = `
+        <div style="margin-top:15px; background:linear-gradient(135deg, #fff5f8, #white); padding:15px; border-radius:12px; border:1px solid #ffd0df;">
+          <div style="font-weight:700; color:var(--pastel-pink-dark); margin-bottom:8px; font-size:0.9rem; display:flex; align-items:center; gap:6px;">
+            <i class="fas fa-stars"></i> Personal Stylist Advice (Gemma-3 AI)
+          </div>
+          ${items}
+          ${raw}
+        </div>
+        `;
+    }
+
+    return `
+    <div style="background:#fffafb; border:2px solid var(--pastel-pink-light); border-radius:15px; padding:20px; text-align:left; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+      <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom: 15px;">
+        <div style="flex:1; min-width:200px; background:white; padding:15px; border-radius:12px;">
+          <div style="font-weight:700; color:var(--pastel-pink-dark); margin-bottom:4px; font-size:0.9rem; text-transform:uppercase;">Body silhouette</div>
+          <div style="font-size:1.2rem; font-weight:700;">${name}${conf}</div>
+        </div>
+        <div style="flex:1; min-width:200px; background:white; padding:15px; border-radius:12px;">
+          <div style="font-weight:700; color:var(--pastel-blue-dark); margin-bottom:4px; font-size:0.9rem; text-transform:uppercase;">Estimated gender</div>
+          <div style="font-size:1.2rem; font-weight:700;">${gender}${gconf}</div>
         </div>
       </div>
-      <hr style="border:none; border-top:1px solid #eee; margin:12px 0;">
-      <div style="display:flex; gap:12px; flex-wrap:wrap;">
-        <div style="flex:1; min-width:240px;">
-          <div style="font-weight:600; margin-bottom:6px;">Key ratios</div>
-          <ul style="margin:0; padding-left:18px;">
+      
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px;">
+        <div style="background:white; padding:15px; border-radius:12px;">
+          <div style="font-weight:700; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px;">Anatomy Analysis</div>
+          <ul style="margin:0; padding-left:18px; font-size:0.9rem; color:#555;">
             <li>Shoulder-to-Height: ${s}</li>
             <li>Waist-to-Height: ${w}</li>
             <li>Hip-to-Height: ${h}</li>
             <li>Leg-to-Height: ${l}</li>
           </ul>
+          ${advHTML}
         </div>
-        <div style="flex:1; min-width:240px;">
-          <div style="font-weight:600; margin-bottom:6px;">Recommended outfits</div>
-          <ul style="margin:0; padding-left:18px;">${recLis || '<li>Choose well-fitted pieces, balance shoulder–hip, lightly define the waist</li>'}</ul>
+        <div style="background:white; padding:15px; border-radius:12px;">
+          <div style="font-weight:700; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:5px;">Styling Strategy</div>
+          <ul style="margin:0; padding-left:18px; font-size:0.9rem; color:#555;">${recLis || '<li>Choose well-fitted pieces, balance shoulder–hip, lightly define the waist</li>'}</ul>
+          ${llmHTML}
         </div>
       </div>
-      ${data.source ? `<div style="margin-top:8px; color:#666;">Prediction source: ${data.source === 'ml' ? 'ML model' : data.source.replace('_', ' ')}</div>` : ''}
+
+      <div style="margin-top:20px; padding:15px; background:rgba(255,158,181,0.1); border-radius:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div style="font-size:0.95rem; color:#444;">
+            <i class="fas fa-magic"></i> AI coordination is now matching items for your <strong>${window.LAST_BODY_SHAPE}</strong> shape!
+        </div>
+        <button class="btn btn-primary" onclick="scrollToSection('shop')" style="width:auto; padding:10px 25px; font-weight:700; border-radius:30px; background:var(--pastel-pink-dark);">
+            Get Styled Now <i class="fas fa-arrow-right"></i>
+        </button>
+      </div>
+      ${data.advanced_error ? `<div style="margin-top:8px; color:#f44336; font-size:0.75rem; text-align:right;"><i class="fas fa-exclamation-triangle"></i> ${data.advanced_error}</div>` : ''}
+      ${data.source ? `<div style="margin-top:4px; color:#999; font-size:0.75rem; text-align:right;">Engine: ${data.source.replace('_', ' ')}</div>` : ''}
     </div>`;
 }
 
@@ -1611,7 +1899,7 @@ async function loadShopItems() {
                 return;
             }
             items.forEach(p => {
-                const price = p.price && Number(p.price) > 0 ? `$${(Number(p.price)/100).toFixed(2)}` : '';
+                const price = p.price && Number(p.price) > 0 ? `$${(Number(p.price) / 100).toFixed(2)}` : '';
                 grid.innerHTML += `
                   <div class="card">
                     <img src="${p.image}" alt="${p.name}">
@@ -1621,7 +1909,7 @@ async function loadShopItems() {
                         <span class="badge" title="${p.shop_name}">${p.shop_name || 'Shop'}</span>
                         <div style="display:flex; gap:8px; align-items:center;">
                           ${price ? `<span class="badge" style="background:#eef;">${price}</span>` : ''}
-                          <a href="${p.product_url}" target="_blank" class="btn btn-secondary" style="width:auto; padding:5px 10px; font-size:0.8rem;">Buy</a>
+                          <a href="${p.product_url}" target="_blank" class="btn" style="width:auto; padding:5px 10px; font-size:0.8rem; background:var(--pastel-blue-dark); color:white;">Buy</a>
                         </div>
                       </div>
                     </div>
@@ -1759,3 +2047,235 @@ document.addEventListener('DOMContentLoaded', () => {
     const registry = document.getElementById('shop-rename-container');
     if (registry) loadShopRegistry();
 });
+
+// Virtual Try-On & Full Workflow logic
+function tryOnItem(itemImageUrl) {
+    const previewContainer = document.getElementById('tryon-dropzone');
+    const previewImg = document.getElementById('tryon-preview-img');
+    
+    if (!previewImg || previewImg.style.display === 'none') {
+        alert("Please upload your photo first to try items on!");
+        return;
+    }
+
+    // Remove existing overlay if any
+    const oldOverlay = document.getElementById('tryon-overlay');
+    if (oldOverlay) oldOverlay.remove();
+
+    // Create new overlay
+    const overlay = document.createElement('img');
+    overlay.id = 'tryon-overlay';
+    overlay.src = itemImageUrl;
+    overlay.style.position = 'absolute';
+    overlay.style.top = '10%';
+    overlay.style.left = '10%';
+    overlay.style.width = '80%';
+    overlay.style.height = '80%';
+    overlay.style.objectFit = 'contain';
+    overlay.style.opacity = '0.7';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.transition = '0.5s';
+    overlay.style.filter = 'drop-shadow(0 0 10px rgba(0,0,0,0.2))';
+    
+    previewContainer.appendChild(overlay);
+    
+    // Smooth scroll back to top if needed
+    previewContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function handleTryOnUpload(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const preview = document.getElementById('tryon-preview-img');
+            const prompt = document.getElementById('tryon-upload-prompt');
+            const overlay = document.getElementById('tryon-overlay');
+            if (overlay) overlay.remove();
+            
+            if (preview && prompt) {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                prompt.style.display = 'none';
+            }
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+async function runFullStylingWorkflow() {
+    const fileInput = document.getElementById('tryon-file-input');
+    const manualShape = document.getElementById('tryon-shape-manual')?.value;
+    const manualGender = document.getElementById('tryon-gender')?.value;
+    const occasion = document.getElementById('tryon-occasion')?.value || 'Play';
+    const style = document.getElementById('tryon-style')?.value || '';
+    const resultArea = document.getElementById('tryon-result-area');
+
+    if (!resultArea) return;
+
+    // 1. Determine Body Shape & Gender
+    let shape = manualShape;
+    let gender = manualGender || window.LAST_DETECTED_GENDER || 'Female';
+
+    if (!shape) {
+        if (!fileInput.files || !fileInput.files[0]) {
+            alert('Please upload a photo first or select a body shape manually!');
+            return;
+        }
+
+        resultArea.innerHTML = `
+            <div style="background:white; border-radius:20px; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:2rem;">
+                <div class="loading-spinner">
+                    <i class="fas fa-microchip fa-spin" style="font-size:3rem; margin-bottom:15px;"></i>
+                    <p>AI is analyzing your body proportions...</p>
+                </div>
+            </div>
+        `;
+
+        // Run detection
+        const formData = new FormData();
+        formData.append('image', fileInput.files[0]);
+
+        try {
+            const res = await fetch(`${API_URL}/identify-body-shape`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (data.body_shape) {
+                shape = humanShapeName(data.body_shape).split(' ')[0];
+                gender = data.gender || 'Unisex';
+                window.LAST_BODY_SHAPE = shape;
+                window.LAST_DETECTED_GENDER = gender;
+            } else {
+                alert('Could not detect body shape. Defaulting to Rectangle.');
+                shape = 'Rectangle';
+            }
+        } catch (e) {
+            console.error(e);
+            shape = 'Rectangle';
+        }
+    }
+
+    // 2. Fetch Outfit
+    resultArea.innerHTML = `
+        <div style="background:white; border-radius:20px; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:2rem;">
+            <div class="loading-spinner">
+                <i class="fas fa-wand-sparkles fa-spin" style="font-size:3rem; margin-bottom:15px;"></i>
+                <p>Generating ${occasion} outfit for your ${shape} shape...</p>
+            </div>
+        </div>
+    `;
+
+    try {
+        let fetchUrl = `${API_URL}/ai/outfit-for-person?body_shape=${encodeURIComponent(shape || '')}&occasion=${encodeURIComponent(occasion || '')}&gender=${encodeURIComponent(gender || 'Unisex')}`;
+        if (style) fetchUrl += `&style=${encodeURIComponent(style)}`;
+
+        const res = await fetch(fetchUrl);
+        const data = await res.json();
+
+        if (data.recommendations && data.recommendations.length > 0) {
+            displaySmartRecommendations(data.recommendations, occasion, shape, true, 'tryon-result-area', gender);
+        } else {
+            resultArea.innerHTML = '<p>AI styling failed. Please check your inventory!</p>';
+        }
+    } catch (e) {
+        console.error(e);
+        resultArea.innerHTML = `<p style="color:red;">Error: ${e.message || 'Connection failed.'}</p>`;
+    }
+}
+
+
+function displaySmartRecommendations(recs, occasion, shape, isFullSet = false, targetId = 'ai-coord-result', gender = 'Female') {
+    const out = document.getElementById(targetId);
+    if (!out) return;
+
+    const title = isFullSet ? `AI Stylist: ${shape} Edition` : `AI Styling for ${occasion || 'Daily'}`;
+    const bg = targetId === 'tryon-result-area' ? 'white' : 'transparent';
+    const padding = targetId === 'tryon-result-area' ? '2rem' : '0';
+    const subTitle = `Balanced for <strong>${shape}</strong> silhouette, <strong>${gender}</strong> & <strong>${occasion}</strong> vibes.`;
+
+    let html = `
+        <div class="smart-rec-container" style="background:${bg}; padding:${padding}; border-radius:20px; height:100%; box-shadow: ${bg === 'white' ? '0 15px 40px rgba(0,0,0,0.05)' : 'none'}; display: flex; flex-direction: column;">
+            <div class="smart-rec-header" style="text-align:center; margin-bottom:15px;">
+                <h3 style="color:var(--pastel-pink-dark); font-size: 1.2rem;"><i class="fas fa-magic"></i> ${title}</h3>
+                <p style="font-size:0.85rem; color:#666;">${subTitle}</p>
+            </div>
+            <div class="smart-rec-grid" style="grid-template-columns: repeat(2, 1fr); gap: 10px; flex-grow: 1; overflow-y: auto; padding: 5px;">
+    `;
+
+    recs.slice(0, 4).forEach((p, idx) => {
+        const price = p.price ? `${p.price.toLocaleString()} VND` : '';
+        const role = idx === 0 && isFullSet ? 'Key Piece' : 'Match';
+        const isTryOn = targetId === 'tryon-result-area';
+        
+        html += `
+            <div class="coord-card" style="border:1px solid #f9f9f9; display: flex; flex-direction: column;">
+                <div style="position:relative;">
+                    <img src="${p.image}" alt="${p.name}" style="height:140px; width:100%; object-fit:contain;">
+                    <span style="position:absolute; top:5px; left:5px; background:rgba(255,255,255,0.9); padding:1px 6px; border-radius:8px; font-size:0.6rem; font-weight:700; color:var(--pastel-pink-dark);">${role}</span>
+                    ${isTryOn ? `
+                        <button onclick="tryOnItem('${p.image}')" style="position:absolute; bottom:5px; right:5px; background:var(--pastel-blue-dark); color:white; border:none; border-radius:15px; padding:3px 8px; font-size:0.65rem; cursor:pointer; box-shadow:0 3px 6px rgba(0,0,0,0.1);">
+                            <i class="fas fa-tshirt"></i> Try On
+                        </button>
+                    ` : ''}
+                </div>
+                <div class="coord-info" style="padding:8px; flex-grow: 1;">
+                    <p class="name" style="font-size:0.75rem; line-height:1.2; height:1.8em; overflow:hidden;">${p.name}</p>
+                    <p class="price" style="font-size:0.75rem; color:var(--pastel-pink-dark); font-weight:700;">${price}</p>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+            <div style="margin-top:20px; text-align:center; display:flex; justify-content:center; gap:10px;">
+                <button class="btn btn-secondary" onclick="runFullStylingWorkflow()" style="width:auto; padding:8px 20px; font-size:0.85rem; border-radius:30px;">
+                    <i class="fas fa-random"></i> Shuffle
+                </button>
+            </div>
+        </div>
+    `;
+    out.innerHTML = html;
+}
+
+// ----------------------------------------------------------------------------------
+// UPLOAD PREVIEW HANDLERS
+// ----------------------------------------------------------------------------------
+function handleAnalysisUpdatePreview(input) {
+    const prompt = document.getElementById('analysis-upload-prompt');
+    const preview = document.getElementById('analysis-preview-img');
+    const dropzone = document.getElementById('analysis-dropzone');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+            prompt.style.display = 'none';
+            // Visual feedback
+            dropzone.style.borderColor = 'var(--pastel-pink)';
+            dropzone.style.background = '#fff';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+function handleTryOnUpload(input) {
+    const prompt = document.getElementById('tryon-upload-prompt');
+    const preview = document.getElementById('tryon-preview-img');
+    const dropzone = document.getElementById('tryon-dropzone');
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.style.display = 'block';
+            prompt.style.display = 'none';
+            // Visual feedback
+            dropzone.style.borderColor = 'var(--pastel-pink)';
+            dropzone.style.background = '#fff';
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}

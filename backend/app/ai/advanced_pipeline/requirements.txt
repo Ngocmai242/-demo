@@ -1,0 +1,15 @@
+torch
+torchvision
+torchaudio
+timm
+transformers
+opencv-python
+scipy
+trimesh
+flask
+numpy
+accelerate
+bitsandbytes
+safetensors
+pillow
+pyyaml

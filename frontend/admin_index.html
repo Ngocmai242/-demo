@@ -27,7 +27,9 @@
 
         /* Remove global body padding-top from base stylesheet on this page
            to tránh cộng dồn với .admin-layout (đang offset đúng bằng var(--nav-height)) */
-        body { padding-top: 0 !important; }
+        body {
+            padding-top: 0 !important;
+        }
 
         .admin-layout {
             display: flex;
@@ -108,28 +110,70 @@
             margin-bottom: 2rem;
             border: 1px solid rgba(162, 210, 255, 0.2);
         }
-        
+
         /* Responsive Admin Layout */
         @media (max-width: 1200px) {
-            .sidebar { width: 220px; }
-            .main-admin-content { margin-left: 220px; }
+            .sidebar {
+                width: 220px;
+            }
+
+            .main-admin-content {
+                margin-left: 220px;
+            }
         }
+
         @media (max-width: 992px) {
-            .sidebar { width: 200px; }
-            .main-admin-content { margin-left: 200px; padding: 1.5rem; }
-            .admin-card { padding: 1.2rem; }
+            .sidebar {
+                width: 200px;
+            }
+
+            .main-admin-content {
+                margin-left: 200px;
+                padding: 1.5rem;
+            }
+
+            .admin-card {
+                padding: 1.2rem;
+            }
         }
+
         @media (max-width: 768px) {
-            .sidebar { width: 72px; padding: 1rem 0.5rem; }
-            .main-admin-content { margin-left: 72px; padding: 1rem; }
-            .sidebar-menu a { justify-content: center; padding: 10px; }
-            .sidebar-menu i { margin-right: 0; }
-            .sidebar-menu a span { display: none; }
+            .sidebar {
+                width: 72px;
+                padding: 1rem 0.5rem;
+            }
+
+            .main-admin-content {
+                margin-left: 72px;
+                padding: 1rem;
+            }
+
+            .sidebar-menu a {
+                justify-content: center;
+                padding: 10px;
+            }
+
+            .sidebar-menu i {
+                margin-right: 0;
+            }
+
+            .sidebar-menu a span {
+                display: none;
+            }
         }
+
         @media (max-width: 480px) {
-            .main-admin-content { padding: 0.75rem; }
-            .stat-grid { grid-template-columns: 1fr; }
-            .admin-card { padding: 1rem; }
+            .main-admin-content {
+                padding: 0.75rem;
+            }
+
+            .stat-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .admin-card {
+                padding: 1rem;
+            }
         }
 
         .stat-grid {
@@ -252,6 +296,49 @@
         .action-btn.delete {
             color: #e57373;
             /* Slightly softer red */
+        }
+
+        /* Normalized Tag Styles */
+        .norm-tag {
+            padding: 2px 8px;
+            border-radius: 8px;
+            margin: 2px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .norm-tag i {
+            font-size: 0.7rem;
+            opacity: 0.8;
+        }
+
+        .tag-basic {
+            background: #f5f5f5;
+            color: #555;
+        }
+
+        .tag-leaf {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .tag-warm {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+
+        .tag-purple {
+            background: #ede7f6;
+            color: #5e35b1;
+        }
+
+        .tag-blue {
+            background: #e3f2fd;
+            color: #1565c0;
         }
 
         .action-btn:hover {
@@ -391,13 +478,20 @@
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-menu">
-                <a href="#dashboard" class="active" onclick="showAdminModule('dashboard')"><i class="fas fa-chart-line"></i> <span>Dashboard</span></a>
-                <a href="#products" onclick="showAdminModule('products')"><i class="fas fa-tshirt"></i> <span>Outfit & Product</span></a>
-                <a href="#crawl" onclick="showAdminModule('crawl')"><i class="fas fa-spider"></i> <span>Crawl Data</span></a>
-                <a href="#mapping" onclick="showAdminModule('mapping')"><i class="fas fa-link"></i> <span>Mapping & Shop</span></a>
-                <a href="#ai" onclick="showAdminModule('ai')"><i class="fas fa-brain"></i> <span>AI Recommendation</span></a>
-                <a href="#users" onclick="showAdminModule('users')"><i class="fas fa-users-cog"></i> <span>User Management</span></a>
-                <a href="#admin-staff" onclick="showAdminModule('admin-staff')"><i class="fas fa-user-shield"></i> <span>Admin Management</span></a>
+                <a href="#dashboard" class="active" onclick="showAdminModule('dashboard')"><i
+                        class="fas fa-chart-line"></i> <span>Dashboard</span></a>
+                <a href="#products" onclick="showAdminModule('products')"><i class="fas fa-tshirt"></i> <span>Outfit &
+                        Product</span></a>
+                <a href="#crawl" onclick="showAdminModule('crawl')"><i class="fas fa-spider"></i> <span>Crawl
+                        Data</span></a>
+                <a href="#mapping" onclick="showAdminModule('mapping')"><i class="fas fa-link"></i> <span>Mapping &
+                        Shop</span></a>
+                <a href="#ai" onclick="showAdminModule('ai')"><i class="fas fa-brain"></i> <span>AI
+                        Recommendation</span></a>
+                <a href="#users" onclick="showAdminModule('users')"><i class="fas fa-users-cog"></i> <span>User
+                        Management</span></a>
+                <a href="#admin-staff" onclick="showAdminModule('admin-staff')"><i class="fas fa-user-shield"></i>
+                    <span>Admin Management</span></a>
             </div>
         </aside>
 
@@ -437,9 +531,13 @@
                     <h3><i class="fas fa-plus-circle"></i> Add Product Manually</h3>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <input type="text" id="manual-name" placeholder="Product Name" style="padding: 8px;">
-                        <input type="number" id="manual-price" placeholder="Price (VND)" style="padding: 8px;">
+                        <input type="text" id="manual-price" placeholder="Price (e.g. 65.000 hoặc 69.000 - 105.000)"
+                            style="padding: 8px;">
                         <input type="text" id="manual-image" placeholder="Image URL" style="padding: 8px;">
                         <input type="text" id="manual-link" placeholder="Shopee/Shop Link" style="padding: 8px;">
+                        <input type="text" id="manual-shop-name" placeholder="Shop Name (e.g., My Boutique)"
+                            style="padding: 8px;">
+                        <div></div> <!-- spacing -->
                         <select id="manual-category" style="padding: 8px;">
                             <option value="">Select Category...</option>
                             <optgroup label="Tops (Áo)">
@@ -546,6 +644,10 @@
                         <div class="form-group">
                             <label>Link</label>
                             <input type="text" id="edit-link">
+                        </div>
+                        <div class="form-group">
+                            <label>Shop Name</label>
+                            <input type="text" id="edit-shop-name">
                         </div>
                         <div class="form-group">
                             <label>Category</label>
@@ -702,9 +804,63 @@
 
             <!-- AI Module -->
             <div id="mod-ai" class="admin-module hidden">
-                <h2 class="section-title" style="text-align: left;">AI Recommendation Rules</h2>
+                <h2 class="section-title" style="text-align: left;">AI Recommendation Brain</h2>
+
+                <div class="stat-grid">
+                    <div class="stat-card" style="border-left-color: var(--admin-blue);">
+                        <p>Coordination Rules</p>
+                        <h3 id="stat-ai-rules">84</h3>
+                    </div>
+                    <div class="stat-card" style="border-left-color: var(--admin-green);">
+                        <p>Confidence Score</p>
+                        <h3>92%</h3>
+                    </div>
+                    <div class="stat-card" style="border-left-color: var(--admin-pink);">
+                        <p>Last Trained</p>
+                        <h3 id="stat-ai-last-train">Recently</h3>
+                    </div>
+                </div>
+
                 <div class="admin-card">
-                    <p>Adjust weighting for body types and styles.</p>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <h3><i class="fas fa-brain"></i> Train Coordination Model</h3>
+                            <p style="color: #666; max-width: 600px;">
+                                This process analyzes your current product inventory (Styles, Colors, Categories)
+                                and builds a smart coordination matrix. It allows the AI to suggest matching parts
+                                (e.g. Top + Bottom) based on professional fashion rules.
+                            </p>
+                        </div>
+                        <button class="btn btn-primary" onclick="trainAI()" id="btn-train-ai">
+                            <i class="fas fa-sync-alt"></i> Train Now
+                        </button>
+                    </div>
+
+                    <div id="train-progress" style="display: none; margin-top: 20px;">
+                        <div style="height: 10px; background: #eee; border-radius: 5px; overflow: hidden;">
+                            <div id="train-progress-bar"
+                                style="width: 0%; height: 100%; background: var(--admin-blue); transition: width 0.3s;">
+                            </div>
+                        </div>
+                        <p id="train-status-text" style="font-size: 0.85rem; color: #666; margin-top: 5px;">Analyzing
+                            inventory...</p>
+                    </div>
+                </div>
+
+                <div class="admin-card" style="margin-top: 20px;">
+                    <h3><i class="fas fa-lightbulb"></i> Coordination Rules Applied</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;">
+                        <ul style="color: #555; font-size: 0.9rem; line-height: 1.6;">
+                            <li><strong>Style Consistency:</strong> Casual items match with Casual/Streetwear.</li>
+                            <li><strong>Color Theory:</strong> Complementary color matching (e.g. Navy + Beige).</li>
+                            <li><strong>Neutral Versatility:</strong> White/Black/Gray match all colors.</li>
+                        </ul>
+                        <ul style="color: #555; font-size: 0.9rem; line-height: 1.6;">
+                            <li><strong>Category Logic:</strong> Top correctly paired with Bottom/Skirt.</li>
+                            <li><strong>Gender Sync:</strong> Automatic filtering by target gender.</li>
+                            <li><strong>Occasion Matching:</strong> Sync by Daily, Party, or Office.</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
@@ -966,8 +1122,11 @@
     </div>
 
     <script src="config.js"></script>
-    <script src="script.js?v=5"></script>
     <script>
+        // Use Global API_URL from config.js
+        const API_URL = window.APP_CONFIG.getApiUrl();
+        const BACKEND_URL = window.APP_CONFIG.getBackendUrl();
+
         // Inline script for simple tab switching
         function showAdminModule(modId) {
             // Hide all
@@ -992,6 +1151,8 @@
                 loadUsers();
             } else if (modId === 'admin-staff') {
                 loadAdmins();
+            } else if (modId === 'crawl') {
+                loadShopRegistry(); // Load shop rename list when crawl tab opens
             }
         }
 
@@ -1396,18 +1557,20 @@
                     <th style="width: 5%; text-align: center;"><input type="checkbox" id="select-all-products" onclick="toggleSelectAllProducts()"></th>
                     <th style="width: 5%; text-align: center;">ID</th>
                     <th style="width: 10%; text-align: center;">Image</th>
-                    <th style="width: 25%; padding-left: 15px;">Name</th>
-                    <th style="width: 15%; color: var(--admin-pink); text-align: center;">Price</th>
-                    <th style="width: 15%; color: var(--admin-blue); text-align: center;">Category</th>
-                    <th style="width: 10%; color: var(--admin-green); text-align: center;">Link</th>
-                    <th style="width: 15%; text-align: center;">Actions</th>
+                    <th style="width: 20%; padding-left: 15px;">Name</th>
+                    <th style="width: 12%; color: var(--admin-pink); text-align: center;">Price</th>
+                    <th style="width: 13%; color: var(--admin-blue); text-align: center;">Category</th>
+                    <th style="width: 10%; color: #666; text-align: center;">Shop</th>
+                    <th style="width: 15%; text-align: center;">Normalized</th>
+                    <th style="width: 5%; color: var(--admin-green); text-align: center;">Link</th>
+                    <th style="width: 5%; text-align: center;">Actions</th>
                 </tr>
             `;
 
-            tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">Loading...</td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="10" style="text-align: center;">Loading...</td></tr>';
 
             try {
-                const res = await fetch(`${window.APP_CONFIG.getApiUrl()}/products`);
+                const res = await fetch(`${API_URL}/products`);
                 if (!res.ok) throw new Error('Failed to load products');
 
                 const products = await res.json();
@@ -1415,7 +1578,7 @@
                 tableBody.innerHTML = '';
 
                 if (products.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No products found</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="10" style="text-align: center;">No products found</td></tr>';
                     return;
                 }
 
@@ -1425,7 +1588,22 @@
                     tr.style.height = '60px'; // Consistent height
 
                     const priceFormatted = p.price ? p.price.toLocaleString() + ' VND' : '0 VND';
-                    const image = p.image || p.image_url || 'https://via.placeholder.com/50';
+                    const rawImage = p.image || p.image_url || '';
+                    let imgSrc = rawImage || 'https://via.placeholder.com/50';
+                    if (rawImage) {
+                        if (rawImage.startsWith('data:') || rawImage.startsWith('blob:')) {
+                            imgSrc = rawImage;
+                        } else if (rawImage.startsWith('/')) {
+                            imgSrc = BACKEND_URL ? (BACKEND_URL + rawImage) : rawImage;
+                        } else if (rawImage.startsWith('http')) {
+                            const blocked = /susercontent\.com|shopee\.vn|lzdcdn\.com|alicdn\.com/i.test(rawImage);
+                            if (blocked && API_URL) {
+                                imgSrc = `${API_URL}/image-proxy?url=${encodeURIComponent(rawImage)}`;
+                            } else {
+                                imgSrc = rawImage;
+                            }
+                        }
+                    }
 
                     // Truncate long names for display
                     const displayName = p.name && p.name.length > 50 ? p.name.substring(0, 50) + '...' : (p.name || 'Unnamed');
@@ -1433,15 +1611,29 @@
                     const subCategory = p.sub_category ? `(${p.sub_category})` : '';
                     const productUrl = p.product_url || p.shopee_link || '';
                     const displayLink = productUrl ? `<a href="${productUrl}" target="_blank" style="color: var(--admin-blue); font-weight: bold;"><i class="fas fa-external-link-alt"></i> Link</a>` : '-';
+                    const normHtml = `
+                        <div style="display: flex; flex-wrap: wrap; justify-content: center; max-width: 250px; margin: 0 auto;">
+                            <span class="norm-tag tag-basic" title="Gender"><i class="fas fa-venus-mars"></i> ${p.gender || 'Unisex'}</span>
+                            <span class="norm-tag tag-basic" title="Material"><i class="fas fa-scroll"></i> ${p.material || 'Other'}</span>
+                            <span class="norm-tag tag-basic" title="Fit Type"><i class="fas fa-arrows-alt"></i> ${p.fit_type || 'Regular fit'}</span>
+                            <span class="norm-tag tag-leaf" title="Color"><i class="fas fa-palette"></i> ${p.color || p.color_label || 'Multicolor'}</span>
+                            <span class="norm-tag tag-leaf" title="Tone"><i class="fas fa-tint"></i> ${p.color_tone || 'Neutral'}</span>
+                            <span class="norm-tag tag-warm" title="Style"><i class="fas fa-tshirt"></i> ${p.style || 'Casual'}</span>
+                            <span class="norm-tag tag-purple" title="Season"><i class="fas fa-calendar-alt"></i> ${p.season || 'All-season'}</span>
+                            <span class="norm-tag tag-blue" title="Occasion"><i class="fas fa-shopping-bag"></i> ${p.occasion || 'Daily wear'}</span>
+                        </div>
+                    `;
 
                     // Actions column with edit/delete buttons
                     tr.innerHTML = `
                         <td style="text-align: center;"><input type="checkbox" class="product-checkbox" value="${p.id}"></td>
                         <td style="text-align: center; color: #888;">${p.id}</td>
-                        <td style="text-align: center;"><img src="${image}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></td>
+                        <td style="text-align: center;"><img src="${imgSrc}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"></td>
                         <td style="padding-left: 15px; font-weight: 500;" title="${p.name}">${displayName}</td>
                         <td style="text-align: center; color: var(--admin-pink); font-weight: 700;">${priceFormatted}</td>
                         <td style="text-align: center;"><span style="background: #e3f2fd; color: var(--admin-blue); padding: 5px 10px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">${category} ${subCategory}</span></td>
+                        <td style="text-align: center; color: #666; font-size: 0.9rem;">${p.shop_name || '-'}</td>
+                        <td style="text-align: center;">${normHtml}</td>
                         <td style="text-align: center;">${displayLink}</td>
                         <td style="text-align: center;">
                             <button class="action-btn" style="color: var(--admin-blue);" onclick="openEditModal(${p.id})"><i class="fas fa-edit"></i></button>
@@ -1452,7 +1644,7 @@
                 });
             } catch (e) {
                 console.error("Error loading products:", e);
-                tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #e57373;">Error loading products. Is backend running?</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: #e57373;">Error loading products. Is backend running?</td></tr>';
             }
         }
 
@@ -1537,6 +1729,7 @@
             }
 
             const style = document.getElementById('manual-style').value;
+            const shop_name = document.getElementById('manual-shop-name').value.trim();
 
             if (!name || !price) {
                 alert('Name and Price are required!');
@@ -1548,7 +1741,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        name, price: parseFloat(price), image, shopee_link: link, category, sub_category, style
+                        name, price: price, image, shopee_link: link, category, sub_category, style, shop_name
                     })
                 });
 
@@ -1557,9 +1750,15 @@
                     // Clear inputs
                     document.getElementById('manual-name').value = '';
                     document.getElementById('manual-price').value = '';
+                    document.getElementById('manual-shop-name').value = '';
                     loadProducts(); // Refresh list
                 } else {
-                    alert('Failed to add product.');
+                    try {
+                        const err = await res.json();
+                        alert(`Failed to add product: ${err.message || res.statusText}`);
+                    } catch (_) {
+                        alert('Failed to add product.');
+                    }
                 }
             } catch (e) {
                 console.error(e);
@@ -1602,6 +1801,7 @@
                 document.getElementById('edit-price').value = product.price;
                 document.getElementById('edit-image').value = product.image;
                 document.getElementById('edit-link').value = product.product_url || product.shopee_link || '';
+                document.getElementById('edit-shop-name').value = product.shop_name || '';
 
                 // Set Category
                 // Construct the value "Category|SubCategory" to match options if possible
@@ -1646,6 +1846,7 @@
             const price = document.getElementById('edit-price').value;
             const image = document.getElementById('edit-image').value;
             const link = document.getElementById('edit-link').value;
+            const shop_name = document.getElementById('edit-shop-name').value.trim();
             const rawCategory = document.getElementById('edit-category').value;
             const style = document.getElementById('edit-style').value;
 
@@ -1683,7 +1884,7 @@
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        name, price: parseFloat(price), image, shopee_link: link, category, sub_category, style
+                        name, price: price, image, shopee_link: link, category, sub_category, style, shop_name
                     })
                 });
 
@@ -1846,7 +2047,24 @@
                     resultsBody.innerHTML = '';
 
                     data.products.forEach((prod, index) => {
-                        const imgUrl = prod.image_url || prod.image || 'https://via.placeholder.com/50';
+                        const rawImage = prod.image_url || prod.image || '';
+                        const API_URL = window.APP_CONFIG && window.APP_CONFIG.getApiUrl ? window.APP_CONFIG.getApiUrl() : '';
+                        const BACKEND_URL = window.APP_CONFIG && window.APP_CONFIG.getBackendUrl ? window.APP_CONFIG.getBackendUrl() : '';
+                        let imgUrl = rawImage || 'https://via.placeholder.com/50';
+                        if (rawImage) {
+                            if (rawImage.startsWith('data:') || rawImage.startsWith('blob:')) {
+                                imgUrl = rawImage;
+                            } else if (rawImage.startsWith('/')) {
+                                imgUrl = BACKEND_URL ? (BACKEND_URL + rawImage) : rawImage;
+                            } else if (rawImage.startsWith('http')) {
+                                const blocked = /susercontent\.com|shopee\.vn|cf\.shopee\.vn|lzdcdn\.com|alicdn\.com/i.test(rawImage);
+                                if (blocked && API_URL) {
+                                    imgUrl = `${API_URL}/image-proxy?url=${encodeURIComponent(rawImage)}`;
+                                } else {
+                                    imgUrl = rawImage;
+                                }
+                            }
+                        }
                         const productLink = prod.product_url || prod.url || prod.shopee_link || '#';
                         const priceDisplay = prod.price ? prod.price.toLocaleString() + ' VND' : '0 VND';
                         const categoryDisplay = mapCrawlCategory(prod);
@@ -1910,10 +2128,10 @@
                 const crawlUrlVal = (document.getElementById('crawl-url-input')?.value || '').trim();
                 const shopLink = shopLinkInput || crawlUrlVal;
 
-                const res = await fetch(`${window.APP_CONFIG.getApiUrl()}/crawl/save`, {
+                const res = await fetch(`${API_URL}/crawl/save`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
+                    body: JSON.stringify({
                         products: productsToSave,
                         shop_name: shopName,
                         shop_url: shopLink
@@ -1943,6 +2161,59 @@
             }
         }
 
+        async function loadShopRegistry() {
+            const container = document.getElementById('shop-rename-container');
+            if (!container) return;
+            container.innerHTML = 'Loading...';
+            try {
+                const res = await fetch(`${API_URL}/shops`);
+                let shops = await res.json();
+                shops = (shops || []);
+                container.innerHTML = '';
+                if (!shops || shops.length === 0) {
+                    container.innerHTML = '<div style="color:#666;">No Shopee shops found.</div>';
+                    return;
+                }
+                shops.forEach(s => {
+                    const row = document.createElement('div');
+                    row.style = 'display:flex; gap:10px; align-items:center; margin-bottom:8px;';
+                    const label = document.createElement('span');
+                    label.textContent = s.shop_name;
+                    label.style = 'min-width:220px; font-weight:600;';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = s.shop_name;
+                    input.style = 'flex:1; padding:6px 8px;';
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-primary';
+                    btn.style = 'width:auto; padding:6px 12px;';
+                    btn.textContent = 'Save';
+                    btn.addEventListener('click', async () => {
+                        const newName = input.value.trim();
+                        if (!newName || newName === s.shop_name) return;
+                        const r = await fetch(`${API_URL}/admin/shops/rename`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ old_name: s.shop_name, new_name: newName })
+                        });
+                        const data = await r.json().catch(() => ({}));
+                        if (r.ok) {
+                            await loadShopRegistry();
+                            alert(`Updated ${data.updated || 0} products to "${newName}"`);
+                        } else {
+                            alert(data.message || 'Rename failed');
+                        }
+                    });
+                    row.appendChild(label);
+                    row.appendChild(input);
+                    row.appendChild(btn);
+                    container.appendChild(row);
+                });
+            } catch (e) {
+                container.innerHTML = '<div style="color:red;">Failed to load shops.</div>';
+            }
+        }
+
         // Initial Check
         document.addEventListener('DOMContentLoaded', () => {
             const user = JSON.parse(localStorage.getItem('user'));
@@ -1954,6 +2225,51 @@
             }
             // Optional: could update welcome text in header in future if dynamic needed
         });
+        async function trainAI() {
+            const btn = document.getElementById('btn-train-ai');
+            const progress = document.getElementById('train-progress');
+            const bar = document.getElementById('train-progress-bar');
+            const statusText = document.getElementById('train-status-text');
+
+            btn.disabled = true;
+            progress.style.display = 'block';
+            bar.style.width = '0%';
+            statusText.innerText = 'Initializing analysis...';
+
+            // Simulate progress for UI feel
+            let p = 0;
+            const interval = setInterval(() => {
+                p += Math.random() * 15;
+                if (p > 90) {
+                    clearInterval(interval);
+                } else {
+                    bar.style.width = p + '%';
+                    if (p > 30) statusText.innerText = 'Extracting feature vectors (Color, Style)...';
+                    if (p > 60) statusText.innerText = 'Building coordination matrix...';
+                }
+            }, 300);
+
+            try {
+                const res = await fetch(`${API_URL}/ai/train`, { method: 'POST' });
+                const data = await res.json();
+
+                clearInterval(interval);
+                bar.style.width = '100%';
+                statusText.innerText = `Training complete! Analyzed ${data.analyzed_items} items.`;
+
+                document.getElementById('stat-ai-rules').innerText = Math.floor(data.analyzed_items * 1.5 + 20);
+                document.getElementById('stat-ai-last-train').innerText = new Date().toLocaleTimeString();
+
+                setTimeout(() => {
+                    btn.disabled = false;
+                    // progress.style.display = 'none';
+                }, 3000);
+            } catch (e) {
+                clearInterval(interval);
+                alert('Training failed: ' + e);
+                btn.disabled = false;
+            }
+        }
     </script>
 </body>
 

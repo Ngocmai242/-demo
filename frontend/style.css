@@ -1394,3 +1394,62 @@ input:focus {
     #profile-view .profile-card { padding: 1.5rem; }
     .profile-header-section { gap: 1rem; }
 }
+
+/* AI Smart Coordination Styles */
+#ai-coord .coord-card {
+    background: white;
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    border: 1px solid #f0f0f0;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+}
+
+#ai-coord .coord-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.08);
+}
+
+#ai-coord .coord-card img {
+    width: 100%;
+    height: 180px;
+    object-fit: cover;
+}
+
+#ai-coord .coord-info {
+    padding: 12px;
+}
+
+#ai-coord .coord-info .name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 5px;
+}
+
+#ai-coord .coord-info .price {
+    font-size: 0.85rem;
+    color: var(--pastel-pink-dark);
+    font-weight: 700;
+}
+
+#ai-coord .smart-rec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.coord-filter-bar select:focus {
+    border-color: var(--pastel-pink);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(214, 140, 158, 0.1);
+}
+
+.loading-spinner {
+    text-align: center;
+    padding: 40px;
+    color: var(--pastel-blue-dark);
+}

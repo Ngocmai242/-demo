@@ -94,6 +94,8 @@ class Product(db.Model):
     shop_name = db.Column(db.String(150))
     crawl_date = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
+    is_valid = db.Column(db.Boolean, default=True)
+
 
     # Relational taxonomy
     item_type_id = db.Column(db.Integer, db.ForeignKey("item_types.id"))
@@ -130,6 +132,8 @@ class Outfit(db.Model):
     image_url = db.Column(db.String(500))
     body_type = db.Column(db.String(50))
     style = db.Column(db.String(50))
+    color = db.Column(db.String(50))
+    color_tone = db.Column(db.String(50))
     shop_link = db.Column(db.String(500))
 
 
