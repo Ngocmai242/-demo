@@ -178,20 +178,22 @@ def save_products_to_db(products: list, db_path: str = None):
     # Tạo bảng nếu chưa có
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS products (
-            id TEXT PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id TEXT UNIQUE NOT NULL,
             name TEXT NOT NULL,
-            price REAL,
+            price INTEGER,
             price_display TEXT,
-            image TEXT,
-            link TEXT,
-            shopee_cat_id INTEGER,
+            image_url TEXT,
+            product_url TEXT,
+            shop_name TEXT,
             shop_id TEXT,
-            item_id TEXT,
             rating REAL,
             sold_count INTEGER,
-            category TEXT,
+            ai_category TEXT,
             classification TEXT,  -- JSON string
-            crawled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            crawl_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active INTEGER DEFAULT 1,
+            is_valid INTEGER DEFAULT 1
         )
     ''')
 
@@ -202,7 +204,7 @@ def save_products_to_db(products: list, db_path: str = None):
             image_url TEXT,
             color TEXT,
             is_primary INTEGER DEFAULT 1,
-            FOREIGN KEY (product_id) REFERENCES products(id)
+            FOREIGN KEY (product_id) REFERENCES products(item_id)
         )
     ''')
 
@@ -211,13 +213,12 @@ def save_products_to_db(products: list, db_path: str = None):
         try:
             cursor.execute('''
                 INSERT OR REPLACE INTO products
-                (id, name, price, price_display, image, link,
-                 shopee_cat_id, shop_id, item_id, rating, sold_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (item_id, name, price, price_display, image_url, product_url,
+                 shop_id, rating, sold_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 p['id'], p['name'], p['price'], p['price_display'],
-                p['image'], p['link'], p['shopee_cat_id'],
-                p['shop_id'], p['item_id'], p['rating'], p['sold_count']
+                p['image'], p['link'], p['shop_id'], p['rating'], p['sold_count']
             ))
 
             # Lưu ảnh vào product_images

@@ -85,17 +85,23 @@ class Product(db.Model):
     __tablename__ = "products"
 
     id = db.Column(db.Integer, primary_key=True)
-    item_id = db.Column(db.Integer, unique=True, nullable=False)
+    item_id = db.Column(db.String(100), unique=True, nullable=False)
     name = db.Column(db.String(200), nullable=False)
     image_url = db.Column(db.String(500))
     product_url = db.Column(db.String(2000))
     price = db.Column(db.Integer)
+    price_display = db.Column(db.String(50))
     details = db.Column(db.String(200))
     shop_name = db.Column(db.String(150))
+    shop_id = db.Column(db.String(100))
+    rating = db.Column(db.Float, default=0)
+    sold_count = db.Column(db.Integer, default=0)
     crawl_date = db.Column(db.DateTime, default=datetime.utcnow)
     is_active = db.Column(db.Boolean, default=True)
     is_valid = db.Column(db.Boolean, default=True)
 
+    ai_category = db.Column(db.String(100))
+    classification = db.Column(db.Text)  # Stores JSON string of classification details
 
     # Relational taxonomy
     item_type_id = db.Column(db.Integer, db.ForeignKey("item_types.id"))

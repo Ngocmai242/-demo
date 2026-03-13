@@ -274,9 +274,9 @@ def save_classifications(classified_products: list, db_path: str = None):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Thêm cột nếu chưa có
+    # Thêm cột nếu chưa có (Dùng cho migration nhẹ)
     try:
-        cursor.execute("ALTER TABLE products ADD COLUMN category TEXT")
+        cursor.execute("ALTER TABLE products ADD COLUMN ai_category TEXT")
         cursor.execute("ALTER TABLE products ADD COLUMN classification TEXT")
     except Exception:
         pass  # Cột đã tồn tại
@@ -285,13 +285,13 @@ def save_classifications(classified_products: list, db_path: str = None):
         cls = p.get('classification', {})
         cursor.execute('''
             UPDATE products SET
-                category = ?,
+                ai_category = ?,
                 classification = ?
-            WHERE id = ?
+            WHERE item_id = ?
         ''', (
             cls.get('category', 'UNKNOWN'),
             json.dumps(cls, ensure_ascii=False),
-            p['id']
+            p['id'] # p['id'] là item_id từ normalize_product
         ))
 
     conn.commit()
