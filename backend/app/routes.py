@@ -31,8 +31,10 @@ from .models import (
     User,
 )
 import json as _json
+from .ai.product_processor import process_garment_for_vton
 
 import requests as _req, time as _time
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 # AI Imports
 try:
@@ -98,6 +100,35 @@ def _make_fallback(person_img_path):
         shutil.copy(person_img_path, out_path)
     return out_path
 
+def is_busy_error(exception):
+    """Checks if the exception is due to server busy/overloaded."""
+    err_msg = str(exception).lower()
+    if "busy" in err_msg or "queue" in err_msg or "overloaded" in err_msg:
+        return True
+    # HTTP errors if applicable
+    if hasattr(exception, 'status_code') and exception.status_code in [429, 503]:
+        return True
+    return False
+
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    retry=retry_if_exception(is_busy_error),
+    reraise=True # Important to let the caller handle it if all retries fail
+)
+def call_fashn_vton_raw(person_path, garment_path, fashn_cat, space_id, hf_token):
+    from gradio_client import Client, handle_file
+    print(f"[FASHN-VTON] Connecting to {space_id}...")
+    _wake_space(space_id)
+    client = Client(space_id, hf_token=hf_token) if hf_token else Client(space_id)
+    
+    result = client.predict(
+        person_image=handle_file(person_path),
+        garment_image=handle_file(garment_path),
+        category=fashn_cat,
+    )
+    return result
+
 def call_fashn_vton(person_path, garment_path, category="tops"):
     """
     Calls FASHN VTON v1.5 on Hugging Face (FREE 100%).
@@ -122,19 +153,8 @@ def call_fashn_vton(person_path, garment_path, category="tops"):
     fashn_cat = cat_map.get(str(category).lower(), "tops")
 
     try:
-        print(f"[FASHN-VTON] Connecting to {space_id}...")
-        _wake_space(space_id)
-        client = Client(space_id, hf_token=hf_token) if hf_token else Client(space_id)
-        
-        # FASHN API signature: 
-        # (person_img, garment_img, category, garment_des, denoise_steps, seed)
-        result = client.predict(
-            person_image=handle_file(person_path),
-            garment_image=handle_file(garment_path),
-            category=fashn_cat,
-            # FASHN v1.5 might have slightly different API names, 
-            # we'll let it try default predict or specify api_name if needed.
-        )
+        # Use the raw caller with retry
+        result = call_fashn_vton_raw(person_path, garment_path, fashn_cat, space_id, hf_token)
         
         # Result processing
         result_raw = result[0] if isinstance(result, (list, tuple)) else result
@@ -150,7 +170,7 @@ def call_fashn_vton(person_path, garment_path, category="tops"):
         print(f"[FASHN-VTON] SUCCESS -> {out_path}")
         return out_path, False
     except Exception as e:
-        print(f"[FASHN-VTON] FAIL: {e}")
+        print(f"[FASHN-VTON] FAIL after retries: {e}")
         return person_path, True
 
 def _get_image_similarity(path1, path2):
@@ -341,103 +361,6 @@ def ai_virtual_tryon(
         except Exception:
             return photo_path
 
-def get_recommended_outfits(
-    gender: str,
-    occasion: str,
-    style: str,
-    body_shape: str,
-    budget: str,
-    limit: int = 6,
-) -> list[dict]:
-    """
-    Reads from SQLite database_v2.db using dynamic filters.
-    Falls back to demo data if DB isn't available or query fails.
-    """
-    budget_map = {
-        "under200": (0, 200_000),
-        "200-500": (200_000, 500_000),
-        "500-1000": (500_000, 1_000_000),
-        "above1000": (1_000_000, 999_999_999),
-    }
-
-    try:
-        import sqlite3
-
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        db_path = os.path.abspath(os.path.join(base_dir, "..", "..", "database", "database_v2.db"))
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-
-        cur.execute("PRAGMA table_info(products)")
-        cols = {r[1] for r in cur.fetchall()}
-
-        url_expr = "shopee_url" if "shopee_url" in cols else "product_url"
-        img_expr = "image_url" if "image_url" in cols else "image"
-
-        where = []
-        params: list = []
-
-        # gender: exact match OR unisex
-        if "gender" in cols and gender:
-            where.append("(gender = ? OR gender = 'unisex' OR gender = 'Unisex')")
-            params.append(gender)
-
-        # occasion: exact match if column exists
-        if "occasion" in cols and occasion:
-            where.append("occasion = ?")
-            params.append(occasion)
-
-        # style_tag: optional if not 'any'
-        if style and style != "any" and "style_tag" in cols:
-            where.append("style_tag = ?")
-            params.append(style)
-
-        # body_shape_tag: optional if column exists and provided
-        if body_shape and "body_shape_tag" in cols:
-            where.append("body_shape_tag = ?")
-            params.append(body_shape)
-
-        # budget
-        if budget and budget != "any" and "price" in cols and budget in budget_map:
-            lo, hi = budget_map[budget]
-            where.append("CAST(price AS INTEGER) BETWEEN ? AND ?")
-            params.extend([lo, hi])
-
-        where_sql = (" WHERE " + " AND ".join(where)) if where else ""
-        sql = f"""
-            SELECT
-                id,
-                name,
-                CAST(price AS INTEGER) AS price,
-                {img_expr} AS image_url,
-                {url_expr} AS shopee_url
-            FROM products
-            {where_sql}
-            ORDER BY RANDOM()
-            LIMIT ?
-        """
-        params.append(int(limit))
-
-        rows = cur.execute(sql, params).fetchall()
-        conn.close()
-
-        items: list[dict] = []
-        for r in rows:
-            items.append(
-                {
-                    "id": r["id"],
-                    "name": r["name"] or "",
-                    "price": int(r["price"] or 0),
-                    "image_url": r["image_url"],
-                    "shopee_url": r["shopee_url"],
-                }
-            )
-        if items:
-            return items
-    except Exception:
-        pass
-
 def _get_demo_products():
     return [
         {
@@ -504,23 +427,42 @@ def get_recommended_outfits(gender, occasion, style, body_shape, budget, garment
         if style and style.lower() != 'any':
              query = query.filter((Product.style_tag == style) | (Product.style_label == style))
 
-        # Garment type filter
+        def _garment_synonyms(gt: str) -> list[str]:
+            gt = (gt or "").lower().strip()
+            if not gt or gt == "any":
+                return []
+            if gt in ("dress", "dresses", "đầm", "váy"):
+                return ["dress", "skirt", "vay", "dam", "chan vay"]
+            if gt in ("tops", "top", "áo"):
+                return ["tops", "top", "ao", "shirt", "tee", "tshirt", "blouse", "hoodie", "sweater"]
+            if gt in ("bottoms", "bottom", "quần"):
+                return ["bottoms", "bottom", "quan", "skirt", "jeans", "pants", "short"]
+            return [gt]
+
+        # Garment type filter - IMPROVED
         if garment_type and str(garment_type).lower() != "any":
-             gt = str(garment_type).lower()
-             if gt == "full outfit":
-                  # Fetch both tops and bottoms
-                  query = query.filter(
-                      (Product.category_label.ilike("top%")) | 
-                      (Product.category_label.ilike("bottom%")) | 
-                      (Product.sub_category_label.ilike("ao%")) | 
-                      (Product.sub_category_label.ilike("quan%"))
-                  )
-             else:
-                  if hasattr(Product, "garment_type"):
-                       query = query.filter(Product.garment_type.ilike(f"{gt}%"))
-                  else:
-                       # fallback to denormalized labels
-                       query = query.filter((Product.category_label.ilike(gt)) | (Product.sub_category_label.ilike(f"{gt}%")))
+            gt = str(garment_type).lower()
+            syns = _garment_synonyms(gt)
+            
+            from sqlalchemy import or_
+            ors = []
+            
+            if gt == "full outfit":
+                ors.extend([
+                    Product.category_label.ilike("top%"),
+                    Product.category_label.ilike("bottom%"),
+                    Product.sub_category_label.ilike("ao%"),
+                    Product.sub_category_label.ilike("quan%")
+                ])
+            else:
+                # Rule 2: Accurate Category mapping for dress/skirt
+                for s in syns:
+                    ors.append(Product.category_label.ilike(f"%{s}%"))
+                    ors.append(Product.sub_category_label.ilike(f"%{s}%"))
+                    ors.append(Product.name.ilike(f"%{s}%"))
+            
+            if ors:
+                query = query.filter(or_(*ors))
              
         # Budget filter
         if budget and budget.lower() != 'any':
@@ -560,6 +502,7 @@ def get_recommended_outfits(gender, occasion, style, body_shape, budget, garment
                 'name': p.name,
                 'price': p.price,
                 'image_url': p.image_url,
+                'clean_image_path': getattr(p, "clean_image_path", None),
                 'shopee_url': getattr(p, "shopee_url", None) or p.product_url or f"https://shopee.vn/search?keyword={p.name}",
                 'garment_type': garment,
                 'gender': (p.gender or "unisex").lower()
@@ -2888,7 +2831,19 @@ def virtual_tryon_api():
              # Never return empty per spec
              recommended = _get_demo_products()
 
-        # 2. Pick garment image (priority: match garment_type -> http image -> first item)
+        def _resolve_clean_abs(clean_rel):
+            if not clean_rel:
+                return None
+            try:
+                rel = str(clean_rel).lstrip("/").replace("\\", "/")
+                abs_path = os.path.abspath(os.path.join(current_app.static_folder, rel))
+                if os.path.exists(abs_path):
+                    return abs_path
+            except Exception:
+                pass
+            return None
+
+        # 2. Pick garment image (priority: match garment_type -> has clean PNG -> http image -> first item)
         candidates = recommended
         if garment_type and garment_type.lower() != "any":
             gt = garment_type.lower()
@@ -2896,20 +2851,37 @@ def virtual_tryon_api():
             if matched:
                 candidates = matched
 
-        best_match = next((x for x in candidates if str(x.get('image_url') or '').startswith('http')), None) or candidates[0]
+        best_match = next((x for x in candidates if _resolve_clean_abs(x.get("clean_image_path"))), None)
+        if not best_match:
+            best_match = next((x for x in candidates if str(x.get('image_url') or '').startswith('http')), None) or candidates[0]
+
         garment_url = best_match.get('image_url')
         shopee_url = best_match.get('shopee_url')
         print(f"[DEBUG] garment_url from DB = {garment_url}")
         print(f"[DEBUG] shopee_url from DB = {shopee_url}")
+        print(f"[DEBUG] clean_image_path from DB = {best_match.get('clean_image_path')}")
         
         if not garment_url:
              # If we can't get garment image, fallback to original person photo (still success)
              garment_url = None
-             
-        garment_path = download_garment_image(garment_url, shopee_url) if garment_url else None
+
+        clean_abs = _resolve_clean_abs(best_match.get("clean_image_path"))
+        garment_raw_path = clean_abs or (download_garment_image(garment_url, shopee_url) if garment_url else None)
+        
+        # Rule 1: Segment & Remove Background for VTON
+        garment_path = None
+        if garment_raw_path and os.path.exists(garment_raw_path):
+            print(f"[TRYON] Processing garment image for VTON: {garment_raw_path}")
+            # Process under static/uploads/tryon/processed/
+            processed_dir = os.path.join(current_app.static_folder, 'uploads', 'tryon', 'processed')
+            garment_path = process_garment_for_vton(garment_raw_path, processed_dir)
+            if garment_path:
+                print(f"[TRYON] Processed garment path: {garment_path}")
+            else:
+                garment_path = garment_raw_path # Fallback to raw if processing failed
+
         if garment_path:
-            print(f"[DEBUG] garment_local_path = {garment_path}")
-            print(f"[DEBUG] garment exists = {os.path.exists(garment_path)}")
+            print(f"[DEBUG] final garment_local_path = {garment_path}")
             print(f"[DEBUG] garment size = {os.path.getsize(garment_path)} bytes")
 
         # 3. Call AI Try-On
@@ -2962,8 +2934,10 @@ def virtual_tryon_api():
                 # Render Top
                 if top_item:
                     print(f"[TRYON] Step 1: Applying TOP {top_item['name']}")
-                    t_garment = download_garment_image(top_item['image_url'], top_item.get('shopee_url'))
-                    if t_garment:
+                    t_garment_raw = download_garment_image(top_item['image_url'], top_item.get('shopee_url'))
+                    if t_garment_raw:
+                        processed_dir = os.path.join(current_app.static_folder, 'uploads', 'tryon', 'processed')
+                        t_garment = process_garment_for_vton(t_garment_raw, processed_dir) or t_garment_raw
                         res_top, fb_top = call_fashn_vton(current_person_path, t_garment, category="tops")
                         if not fb_top:
                             current_person_path = res_top
@@ -2972,8 +2946,10 @@ def virtual_tryon_api():
                 # Render Bottom
                 if bottom_item:
                     print(f"[TRYON] Step 2: Applying BOTTOM {bottom_item['name']}")
-                    b_garment = download_garment_image(bottom_item['image_url'], bottom_item.get('shopee_url'))
-                    if b_garment:
+                    b_garment_raw = download_garment_image(bottom_item['image_url'], bottom_item.get('shopee_url'))
+                    if b_garment_raw:
+                        processed_dir = os.path.join(current_app.static_folder, 'uploads', 'tryon', 'processed')
+                        b_garment = process_garment_for_vton(b_garment_raw, processed_dir) or b_garment_raw
                         res_bottom, fb_bottom = call_fashn_vton(current_person_path, b_garment, category="bottoms")
                         if not fb_bottom:
                             final_path = res_bottom
@@ -3003,6 +2979,9 @@ def virtual_tryon_api():
                     if sim > 0.85:
                         print("[TRYON] Image didn't change enough (>85% similar). Trying IDM-VTON fallback...")
                         res_path, fb = call_idm_vton(in_path, garment_path)
+                
+                final_path = res_path
+                is_fallback = fb
 
             # Copy to final out_path
             shutil.copyfile(final_path, out_path)

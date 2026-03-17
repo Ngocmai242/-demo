@@ -54,8 +54,10 @@ npm start
 Lệnh này sẽ:
 1.  Khởi động **Backend** (Python Flask) tại `http://localhost:8080`.
     *   *Chế độ Debug được bật: Server sẽ tự động khởi động lại khi bạn sửa code Python.*
-2.  Khởi động **Frontend** (http-server) tại `http://localhost:5500`.
-3.  Tự động mở trình duyệt mặc định và truy cập vào trang web.
+2.  **Frontend** được phục vụ trực tiếp bởi Flask (static folder = `frontend/`) tại cùng domain `http://localhost:8080`.
+3.  Tự động mở **2 tab**:
+    *   User: `http://127.0.0.1:8080/index.html`
+    *   Admin: `http://127.0.0.1:8080/admin_login.html`
 
 ---
 
@@ -67,7 +69,39 @@ Nếu bạn không muốn sử dụng Node.js, bạn có thể chạy thủ côn
     *   Mở terminal, chạy: `python backend/server.py`
     *   Server chạy tại: `http://localhost:8080`
 2.  **Chạy Frontend**:
-    *   Mở file `frontend/admin_login.html` (hoặc các file .html khác) trực tiếp bằng trình duyệt hoặc dùng Live Server của VSCode.
+    *   Truy cập trực tiếp qua Flask:
+        - User: `http://127.0.0.1:8080/index.html`
+        - Admin: `http://127.0.0.1:8080/admin_login.html`
+
+---
+
+## Virtual Try-On: dùng đúng ảnh crawl (clean PNG)
+
+Để model Try-On dùng đúng ảnh sản phẩm (đặc biệt khi ảnh crawl là ảnh ghép/multi-item hoặc có người mẫu), hãy tạo ảnh **PNG nền trong suốt** và lưu vào `products.clean_image_path`.
+
+### 1) Tạo file `.env` (khuyến nghị)
+
+Tạo `.env` ở thư mục gốc project (cùng cấp `backend/`):
+
+```env
+HF_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxx
+```
+
+### 2) Batch clean/segment ảnh từ DB
+
+Chạy:
+
+```bash
+python data_engine/segment_clean_images.py --limit 200
+```
+
+Tuỳ chọn:
+- `--overwrite`: xử lý lại kể cả khi đã có `clean_image_path`
+
+Ảnh output nằm ở:
+- `frontend/static/clean_images/<item_id>.png`
+
+Sau đó endpoint `/api/virtual-tryon` sẽ **ưu tiên dùng `clean_image_path`** làm input garment cho VTON.
 
 ## Chức năng
 
