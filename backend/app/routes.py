@@ -2374,40 +2374,64 @@ def normalize_dataset_api():
         import sqlite3
         limit = int(request.json.get('limit', 50))
         overwrite = bool(request.json.get('overwrite', False))
+        product_ids = request.json.get('product_ids', []) # NEW: Nhận list ID
         
-        from data_engine.image_cleaner import batch_clean_from_db
+        from data_engine.image_cleaner import batch_clean_from_db, clean_product_image
         from data_engine.product_classifier import batch_classify, save_classifications
         
         db_path = os.path.abspath(os.path.join(current_app.root_path, '..', '..', 'database', 'database_v2.db'))
         
-        print(f"[Admin] Starting Normalization Pipeline (limit={limit}, overwrite={overwrite})...")
+        print(f"[Admin] Starting Normalization Pipeline (IDS={len(product_ids)}, limit={limit})...")
         
         # Step 1 & 2: Clean Images
-        cleaned_count = batch_clean_from_db(db_path, limit=limit, overwrite=overwrite)
+        cleaned_count = 0
+        if product_ids:
+            # Xử lý theo danh sách ID cụ thể
+            from app.models import Product
+            BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            SAVE_DIR = os.path.join(current_app.static_folder, "clean_images") # Lưu vào static cho frontend
+            os.makedirs(SAVE_DIR, exist_ok=True)
+            
+            for pid in product_ids:
+                p = db.session.get(Product, pid)
+                if p and p.image_url:
+                    clean_path = clean_product_image(p.image_url, p.item_id or p.id, SAVE_DIR)
+                    if clean_path:
+                        p.clean_image_path = clean_path
+                        cleaned_count += 1
+            db.session.commit()
+        else:
+            # Xử lý hàng loạt như cũ
+            cleaned_count = batch_clean_from_db(db_path, limit=limit, overwrite=overwrite)
         
         # Step 3: Classify (Update categories)
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         
-        query = "SELECT id, name, image_url as image FROM products"
-        if not overwrite:
-            query += " WHERE classification IS NULL OR classification = ''"
-        query += f" LIMIT {limit}"
+        if product_ids:
+            # Chỉ lấy các sản phẩm vừa chọn để classify
+            ids_str = ",".join(map(str, product_ids))
+            query = f"SELECT id, name, image_url as image FROM products WHERE id IN ({ids_str})"
+        else:
+            query = "SELECT id, name, image_url as image FROM products"
+            if not overwrite:
+                query += " WHERE classification IS NULL OR classification = ''"
+            query += f" LIMIT {limit}"
         
-        products = [dict(r) for r in cur.execute(query).fetchall()]
+        products_to_classify = [dict(r) for r in cur.execute(query).fetchall()]
         conn.close()
         
-        if products:
-            print(f"[Admin] Classifying {len(products)} products...")
-            classified = batch_classify(products, analyze_images=False)
+        if products_to_classify:
+            print(f"[Admin] Classifying {len(products_to_classify)} products...")
+            classified = batch_classify(products_to_classify, analyze_images=False)
             save_classifications(classified, db_path)
             
         return jsonify({
             'success': True,
-            'message': f'Normalization completed: {cleaned_count} images cleaned, {len(products)} products classified.',
+            'message': f'Normalization completed: {cleaned_count} images cleaned, {len(products_to_classify)} products classified.',
             'cleaned_count': cleaned_count,
-            'classified_count': len(products)
+            'classified_count': len(products_to_classify)
         }), 200
         
     except Exception as e:

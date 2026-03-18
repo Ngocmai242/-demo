@@ -808,6 +808,10 @@
                         <button class="btn" onclick="deleteSelectedProducts()"
                             style="width: auto; background-color: #e57373; color: white;"><i class="fas fa-trash"></i>
                             Delete Selected</button>
+                        <button class="btn" onclick="runNormalizationForSelected()"
+                            style="width: auto; background: var(--admin-pink); color: white; border:none;">
+                            <i class="fas fa-magic"></i> Normalize Selected
+                        </button>
                         <button class="btn" onclick="deleteAllProducts()"
                             style="width: auto; background-color: #d32f2f; color: white; margin-left: auto;"><i
                                 class="fas fa-bomb"></i> Delete ALL</button>
@@ -1947,12 +1951,12 @@
                 <tr style="border-bottom: 2px solid #edeff2;">
                     <th style="width: 5%; text-align: center;"><input type="checkbox" id="select-all-products" onclick="toggleSelectAllProducts()"></th>
                     <th style="width: 5%; text-align: center;">ID</th>
-                    <th style="width: 10%; text-align: center;">Image</th>
-                    <th style="width: 20%; padding-left: 15px;">Name</th>
+                    <th style="width: 8%; text-align: center;">Image</th>
+                    <th style="width: 18%; padding-left: 15px;">Name</th>
                     <th style="width: 12%; color: var(--admin-pink); text-align: center;">Price</th>
-                    <th style="width: 13%; color: var(--admin-blue); text-align: center;">Category</th>
-                    <th style="width: 10%; color: #666; text-align: center;">Shop</th>
-                    <th style="width: 15%; text-align: center;">Normalized</th>
+                    <th style="width: 12%; color: var(--admin-blue); text-align: center;">Category</th>
+                    <th style="width: 10%; text-align: center;">Standardized</th>
+                    <th style="width: 20%; text-align: center;">Attributes</th>
                     <th style="width: 5%; color: var(--admin-green); text-align: center;">Link</th>
                     <th style="width: 5%; text-align: center;">Actions</th>
                 </tr>
@@ -2018,6 +2022,11 @@
                         </div>
                     `;
 
+                    const isClean = p.clean_image_path && p.clean_image_path.trim() !== '';
+                    const cleanBadge = isClean 
+                        ? `<span style="background: rgba(72,199,116,0.1); color: #2e7d32; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(72,199,116,0.2);"><i class="fas fa-check"></i> Clean</span>`
+                        : `<span style="background: rgba(148,163,184,0.1); color: #64748b; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(148,163,184,0.2);"><i class="fas fa-clock"></i> Raw</span>`;
+
                     // Actions column with edit/delete buttons
                     tr.innerHTML = `
                         <td style="text-align: center;"><input type="checkbox" class="product-checkbox" value="${p.id}"></td>
@@ -2026,10 +2035,11 @@
                         <td style="padding-left: 15px; font-weight: 500;" title="${p.name}">${displayName}</td>
                         <td style="text-align: center; color: var(--admin-pink); font-weight: 700;">${priceFormatted}</td>
                         <td style="text-align: center;"><span style="background: #e3f2fd; color: var(--admin-blue); padding: 5px 10px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">${category} ${subCategory}</span></td>
-                        <td style="text-align: center; color: #666; font-size: 0.9rem;">${p.shop_name || '-'}</td>
+                        <td style="text-align: center;">${cleanBadge}</td>
                         <td style="text-align: center;">${normHtml}</td>
                         <td style="text-align: center;">${displayLink}</td>
                         <td style="text-align: center;">
+                            <button class="action-btn" onclick="runNormalization([${p.id}])" title="AI Standardize" style="color: var(--admin-pink);"><i class="fas fa-magic"></i></button>
                             <button class="action-btn" style="color: var(--admin-blue);" onclick="openEditModal(${p.id})"><i class="fas fa-edit"></i></button>
                             <button class="action-btn delete" style="color: #e57373;" onclick="deleteProduct(${p.id})"><i class="fas fa-trash-alt"></i></button>
                         </td>
@@ -2047,6 +2057,14 @@
             const master = document.getElementById('select-all-products');
             const checkboxes = document.querySelectorAll('.product-checkbox');
             checkboxes.forEach(cb => cb.checked = master.checked);
+        }
+
+        async function runNormalizationForSelected() {
+            const selected = Array.from(document.querySelectorAll('.product-checkbox:checked')).map(cb => parseInt(cb.value));
+            if (selected.length === 0) return alert('Please select at least one product.');
+            if (!confirm(`Run AI Normalization for ${selected.length} items?`)) return;
+            await runNormalization(selected);
+            loadProducts(); // Refresh to see badges
         }
 
         async function deleteSelectedProducts() {
@@ -2775,7 +2793,7 @@
                 btn.disabled = false;
             }
         }
-        async function runNormalization() {
+        async function runNormalization(productIds = []) {
             const btn = document.getElementById('btn-run-normalization');
             const progress = document.getElementById('norm-progress');
             const bar = document.getElementById('norm-progress-bar');
@@ -2784,7 +2802,9 @@
             const limit = document.getElementById('norm-limit').value || 50;
             const overwrite = document.getElementById('norm-overwrite').checked;
 
-            if (!confirm(`Start AI Normalization for ${limit} items? This may take a few minutes.`)) return;
+            if (productIds.length === 0) {
+                if (!confirm(`Start AI Normalization for ${limit} items? This may take a few minutes.`)) return;
+            }
 
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Normalizing...';
@@ -2800,16 +2820,20 @@
                     let next = cur + Math.floor(Math.random() * 5) + 1;
                     bar.style.width = next + '%';
                     percentText.innerText = next + '%';
-                    if (next > 30) statusText.innerText = 'Extracting clothing & removing backgrounds...';
+                    if (next > 10) statusText.innerText = 'Extracting clothing & removing backgrounds...';
                     if (next > 60) statusText.innerText = 'Categorizing items for VTON...';
                 }
-            }, 1500);
+            }, 1000);
 
             try {
                 const response = await fetch(`${API_URL}/admin/normalize-dataset`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ limit: parseInt(limit), overwrite: overwrite })
+                    body: JSON.stringify({ 
+                        limit: parseInt(limit), 
+                        overwrite: overwrite,
+                        product_ids: productIds 
+                    })
                 });
 
                 const result = await response.json();

@@ -75,13 +75,28 @@ def extract_main_product(input_path, output_path=None, model_name="u2netp"):
         if contours:
             main_contour = max(contours, key=cv2.contourArea)
             x, y, w, h = cv2.boundingRect(main_contour)
-            # Thêm padding nhẹ
-            pad = 20
-            x = max(0, x - pad)
-            y = max(0, y - pad)
-            w = min(img_nobg.width - x, w + 2 * pad)
-            h = min(img_nobg.height - y, h + 2 * pad)
-            cropped = img_nobg.crop((x, y, x+w, y+h))
+            
+            # Tính toán padding (10% của chiều lớn nhất)
+            max_dim = max(w, h)
+            pad = int(max_dim * 0.1)
+            
+            # Crop vùng chứa sản phẩm với padding
+            left = max(0, x - pad)
+            top = max(0, y - pad)
+            right = min(img_nobg.width, x + w + pad)
+            bottom = min(img_nobg.height, y + h + pad)
+            
+            cropped = img_nobg.crop((left, top, right, bottom))
+            
+            # --- THÊM: Đưa về ảnh canvas chuẩn (ví dụ tỷ lệ 3:4 cho VTON) ---
+            # Tạo một canvas mới màu trong suốt để chứa sản phẩm đã crop
+            target_w, target_h = cropped.size
+            final_dim = max(target_w, target_h)
+            canvas = Image.new("RGBA", (final_dim, final_dim), (0, 0, 0, 0))
+            # Dán vào chính giữa
+            offset = ((final_dim - target_w) // 2, (final_dim - target_h) // 2)
+            canvas.paste(cropped, offset)
+            cropped = canvas
         else:
             cropped = img_nobg
 
