@@ -6,6 +6,7 @@ import requests
 import shutil
 import uuid
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import (
     Blueprint,
@@ -2441,21 +2442,32 @@ def normalize_dataset_api():
 @main_bp.route('/api/products', methods=['GET', 'POST'])
 def products():
     if request.method == 'GET':
-        products = Product.query.order_by(Product.id.desc()).limit(100).all()
+        # Use joinedload to fetch normalization status in one query
+        from sqlalchemy.orm import joinedload
+        products = Product.query.options(joinedload(Product.normalized_entry)).order_by(Product.id.desc()).limit(150).all()
         payload = []
         for p in products:
             it_name = p.item_type.name if p.item_type else p.category_label
             cat_name = p.category.name if p.category else p.sub_category_label
             gender_disp = _finalize_gender(p.gender or 'Unisex', it_name, cat_name, p.name)
+            
+            # Trạng thái chuẩn hóa
+            norm_status = 'raw'
+            if p.clean_image_path:
+                norm_status = 'clean'
+            elif p.normalized_entry:
+                norm_status = p.normalized_entry.status # 'pending' | 'processing' | 'failed'
+
             payload.append({
                 'id': p.id,
                 'item_id': p.item_id,
                 'name': p.name,
                 'image': p.image_url,
                 'clean_image_path': p.clean_image_path,
+                'norm_status': norm_status,
                 'price': p.price,
-                'category': p.item_type.name if p.item_type else p.category_label,
-                'sub_category': p.category.name if p.category else p.sub_category_label,
+                'category': it_name,
+                'sub_category': cat_name,
                 'product_url': p.product_url,
                 'shopee_url': getattr(p, "shopee_url", None) or p.product_url,
                 'style_tag': getattr(p, "style_tag", None),
@@ -3280,6 +3292,122 @@ def virtual_tryon_status(task_id):
         
     return jsonify({"success": False, "message": "Task not found"}), 404
 
+@main_bp.route('/api/admin/normalized-selected', methods=['GET'])
+def get_normalized_selected():
+    """Lấy danh sách các sản phẩm trong hàng đợi chuẩn hóa."""
+    from .models import NormalizedProduct, Product
+    
+    status_filter = request.args.get('status')
+    category_filter = request.args.get('category')
+    
+    query = NormalizedProduct.query
+    if status_filter:
+        query = query.filter(NormalizedProduct.status == status_filter)
+    if category_filter:
+        query = query.filter(NormalizedProduct.category == category_filter)
+
+        
+    normalized_list = query.order_by(NormalizedProduct.created_at.desc()).all()
+    
+    results = []
+    for item in normalized_list:
+        results.append({
+            "id": item.id,
+            "product_id": item.product_id,
+            "product_name": item.product.name if item.product else "Unknown",
+            "original_image": item.original_image_url,
+            "normalized_image": item.normalized_image_path,
+            "category": item.category,
+            "status": item.status,
+            "updated_at": item.updated_at.strftime("%Y-%m-%d %H:%M:%S")
+        })
+        
+    return jsonify({"success": True, "data": results})
+
+@main_bp.route('/api/admin/normalize-selected/add', methods=['POST'])
+def add_to_normalized_queue():
+    """Thêm các sản phẩm được chọn từ Product List vào hàng đợi chuẩn hóa."""
+    from .models import NormalizedProduct, Product
+    data = request.get_json()
+    product_ids = data.get("product_ids", [])
+    
+    if not product_ids:
+        return jsonify({"success": False, "message": "No products selected"}), 400
+        
+    added_count = 0
+    for pid in product_ids:
+        # Kiểm tra xem đã tồn tại trong hàng đợi chưa
+        existing = NormalizedProduct.query.filter_by(product_id=pid).first()
+        if not existing:
+            product = Product.query.get(pid)
+            if product:
+                new_item = NormalizedProduct(
+                    product_id=pid,
+                    original_image_url=product.image_url,
+                    status="pending"
+                )
+                db.session.add(new_item)
+                added_count += 1
+                
+    db.session.commit()
+    return jsonify({"success": True, "added": added_count})
+
+from .background_tasks import normalization_queue, normalization_status
+
+@main_bp.route('/api/admin/normalize-selected/run', methods=['POST'])
+def run_normalization_selected():
+    """Bắt đầu quá trình chuẩn hóa nền."""
+    if normalization_status["is_running"]:
+        return jsonify({"success": False, "message": "A normalization process is already running."}), 400
+
+    data = request.get_json()
+    ids = data.get("ids", [])
+
+    if not ids:
+        return jsonify({"success": False, "message": "No items selected for normalization"}), 400
+
+    # Đặt lại trạng thái và bắt đầu
+    normalization_status["is_running"] = True
+    normalization_status["processed"] = 0
+    normalization_status["total"] = len(ids)
+    normalization_status["status"] = "Running"
+
+    for item_id in ids:
+        normalization_queue.put(item_id)
+
+    return jsonify({"success": True, "message": f"Started normalization for {len(ids)} items."})
+
+@main_bp.route('/api/admin/normalize-selected/status', methods=['GET'])
+def get_normalization_status():
+    """Lấy trạng thái hiện tại của quá trình chuẩn hóa."""
+    # Nếu tác vụ đang chạy nhưng hàng đợi trống, có nghĩa là nó đã hoàn thành
+    if normalization_status["is_running"] and normalization_queue.empty():
+        # Kiểm tra thêm một chút thời gian để đảm bảo worker cuối cùng đã xong
+        import time
+        time.sleep(0.5)
+        if normalization_queue.empty():
+            normalization_status["is_running"] = False
+            normalization_status["status"] = "Idle"
+        
+    return jsonify(normalization_status)
+
+@main_bp.route('/api/admin/normalize-selected/delete', methods=['POST'])
+def delete_normalized_items():
+    """Xóa các item khỏi tab Normalized Selected."""
+    from .models import NormalizedProduct
+    data = request.get_json()
+    ids = data.get("ids", [])
+    
+    if not ids:
+        return jsonify({"success": False, "message": "No items selected"}), 400
+        
+    items = NormalizedProduct.query.filter(NormalizedProduct.id.in_(ids)).all()
+    for item in items:
+        db.session.delete(item)
+        
+    db.session.commit()
+    return jsonify({"success": True, "deleted": len(items)})
+
 # --- Smart AI Coordination Routes ---
 
 
@@ -3543,6 +3671,25 @@ def classify_products_route():
         classified = batch_classify(products, analyze_images=True)
         saved = save_classifications(classified)
         return jsonify({'success': True, 'classified': len(classified), 'saved': saved})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@main_bp.route('/api/admin/run-normalization', methods=['POST'])
+def run_normalization_route():
+    """
+    Endpoint for the batch normalization button.
+    """
+    data = request.get_json() or {}
+    limit = int(data.get('limit', 50))
+    
+    try:
+        # Redirect to the new logic if needed, or keep as batch utility
+        from data_engine.image_cleaner import batch_clean_from_db
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.abspath(os.path.join(base_dir, '..', '..', 'database', 'database_v2.db'))
+        
+        cleaned_count = batch_clean_from_db(db_path, limit=limit)
+        return jsonify({'success': True, 'cleaned': cleaned_count})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

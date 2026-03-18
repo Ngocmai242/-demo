@@ -56,3 +56,12 @@ def estimate_gender(ratios):
         return "Female", round(conf, 3)
     # Otherwise uncertain
     return "Uncertain", 0.5
+
+def predict_shape_with_confidence(*args, **kwargs):
+    """Bridge to the hybrid classifier in classifier.py"""
+    try:
+        from .classifier import predict_shape_with_confidence as _predict
+        return _predict(*args, **kwargs)
+    except ImportError:
+        # Fallback if classifier is not ready
+        return "Rectangle", 0.5, "fallback"

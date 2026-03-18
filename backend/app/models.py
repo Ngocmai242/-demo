@@ -157,4 +157,19 @@ class Outfit(db.Model):
     clean_image_path = db.Column(db.String(255))
 
 
+class NormalizedProduct(db.Model):
+    __tablename__ = "normalized_products"
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("products.id"), nullable=False)
+    original_image_url = db.Column(db.String(500))
+    normalized_image_path = db.Column(db.String(500))
+    category = db.Column(db.String(100))
+    status = db.Column(db.String(20), default="pending")  # pending, processed, failed
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    product = db.relationship("Product", backref=db.backref("normalized_entry", uselist=False))
+
+
 db.Index("ix_products_item_id", Product.item_id, unique=True)

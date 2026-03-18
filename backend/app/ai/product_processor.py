@@ -49,13 +49,13 @@ def detect_products(image_path):
         print(f"[YOLO] Error: {e}")
         return []
 
-def extract_main_product(input_path, output_path=None, model_name="u2netp"):
+def extract_main_product(input_path, output_path=None, model_name="u2net_cloth_seg"):
     """
     Tách nền và cắt lấy sản phẩm chính. 
     Sử dụng model_name="u2net_cloth_seg" để tách quần áo khỏi người.
     """
     try:
-        img = Image.open(input_path).convert("RGB")
+        img = Image.open(input_path).convert("RGBA")
         
         # Determine session
         session = get_rembg_session(model_name)
@@ -66,19 +66,42 @@ def extract_main_product(input_path, output_path=None, model_name="u2netp"):
         else:
             img_nobg = remove(img)
             
-        # Tạo mask từ kênh alpha
-        alpha = np.array(img_nobg)[:, :, 3]
+        # --- CẢI TIẾN: Xử lý Mask để lấp đầy lỗ hổng (do tay che) ---
+        # Chuyển sang numpy để xử lý OpenCV
+        img_np = np.array(img_nobg)
+        alpha = img_np[:, :, 3]
         
-        # Tìm contours để crop sát
-        contours, _ = cv2.findContours(alpha, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # 1. Khử nhiễu và lấp đầy các lỗ hổng nhỏ (Morphological Closing)
+        # Điều này giúp nối lại các phần bị tay người hoặc vật cản cắt đứt
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        alpha_closed = cv2.morphologyEx(alpha, cv2.MORPH_CLOSE, kernel, iterations=2)
+        
+        # 2. Tìm contours của mask đã được làm sạch
+        contours, _ = cv2.findContours(alpha_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if contours:
+            # --- THÊM: Inpainting cơ bản để xóa tay người đè lên áo ---
+            # Chỉ thực hiện nếu phát hiện có vùng da người nằm đè lên áo
+            hsv = cv2.cvtColor(img_np[:, :, :3], cv2.COLOR_RGB2HSV)
+            lower_skin = np.array([0, 20, 70], dtype=np.uint8)
+            upper_skin = np.array([20, 255, 255], dtype=np.uint8)
+            skin_mask = cv2.inRange(hsv, lower_skin, upper_skin)
+            
+            # Vùng cần inpaint là vùng da nằm bên trong mask của áo
+            mask_to_inpaint = cv2.bitwise_and(skin_mask, alpha_closed)
+            
+            if np.any(mask_to_inpaint > 0):
+                # Làm rộng mask inpaint một chút để xóa sạch biên tay
+                mask_to_inpaint = cv2.dilate(mask_to_inpaint, np.ones((3,3), np.uint8), iterations=1)
+                img_np[:, :, :3] = cv2.inpaint(img_np[:, :, :3], mask_to_inpaint, 3, cv2.INPAINT_TELEA)
+
+            # Lấy contour lớn nhất (giả định là sản phẩm chính)
             main_contour = max(contours, key=cv2.contourArea)
             x, y, w, h = cv2.boundingRect(main_contour)
             
-            # Tính toán padding (10% của chiều lớn nhất)
+            # 3. Tính toán padding thông minh (15% thay vì 10% để tránh mất góc)
             max_dim = max(w, h)
-            pad = int(max_dim * 0.1)
+            pad = int(max_dim * 0.15)
             
             # Crop vùng chứa sản phẩm với padding
             left = max(0, x - pad)
@@ -86,15 +109,26 @@ def extract_main_product(input_path, output_path=None, model_name="u2netp"):
             right = min(img_nobg.width, x + w + pad)
             bottom = min(img_nobg.height, y + h + pad)
             
-            cropped = img_nobg.crop((left, top, right, bottom))
+            # Áp dụng mask đã được 'lấp đầy' vào ảnh gốc
+            img_np[:, :, 3] = alpha_closed
+            img_final = Image.fromarray(img_np)
             
-            # --- THÊM: Đưa về ảnh canvas chuẩn (ví dụ tỷ lệ 3:4 cho VTON) ---
-            # Tạo một canvas mới màu trong suốt để chứa sản phẩm đã crop
+            cropped = img_final.crop((left, top, right, bottom))
+            
+            # --- THÊM: Đưa về ảnh canvas chuẩn (tỷ lệ 3:4 cho VTON) ---
+            # Fashn VTON 1.5 thường yêu cầu ảnh tỷ lệ đứng (portrait)
             target_w, target_h = cropped.size
-            final_dim = max(target_w, target_h)
-            canvas = Image.new("RGBA", (final_dim, final_dim), (0, 0, 0, 0))
+            # Tạo canvas tỷ lệ 3:4
+            final_h = target_h + (pad * 2)
+            final_w = int(final_h * 0.75)
+            
+            if target_w > final_w:
+                final_w = target_w + (pad * 2)
+                final_h = int(final_w / 0.75)
+
+            canvas = Image.new("RGBA", (final_w, final_h), (0, 0, 0, 0))
             # Dán vào chính giữa
-            offset = ((final_dim - target_w) // 2, (final_dim - target_h) // 2)
+            offset = ((final_w - target_w) // 2, (final_h - target_h) // 2)
             canvas.paste(cropped, offset)
             cropped = canvas
         else:

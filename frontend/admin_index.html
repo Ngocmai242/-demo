@@ -686,6 +686,7 @@
                         class="fas fa-chart-line"></i> <span>Dashboard</span></a>
                 <a href="#products" onclick="showAdminModule('products')"><i class="fas fa-tshirt"></i> <span>Outfit &
                         Product</span></a>
+                <a href="#normalized" onclick="showAdminModule('normalized')"><i class="fas fa-magic"></i> <span>Normalized Selected</span></a>
                 <a href="#crawl" onclick="showAdminModule('crawl')"><i class="fas fa-spider"></i> <span>Crawl
                         Data</span></a>
                 <a href="#mapping" onclick="showAdminModule('mapping')"><i class="fas fa-link"></i> <span>Mapping &
@@ -808,9 +809,9 @@
                         <button class="btn" onclick="deleteSelectedProducts()"
                             style="width: auto; background-color: #e57373; color: white;"><i class="fas fa-trash"></i>
                             Delete Selected</button>
-                        <button class="btn" onclick="runNormalizationForSelected()"
+                        <button class="btn" onclick="addToNormalizedQueue()"
                             style="width: auto; background: var(--admin-pink); color: white; border:none;">
-                            <i class="fas fa-magic"></i> Normalize Selected
+                            <i class="fas fa-plus"></i> Add to Normalized Queue
                         </button>
                         <button class="btn" onclick="deleteAllProducts()"
                             style="width: auto; background-color: #d32f2f; color: white; margin-left: auto;"><i
@@ -955,6 +956,55 @@
                             <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
                             <button class="btn btn-primary" onclick="saveEditedProduct()">Save Changes</button>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Normalized Selected Module -->
+            <div id="mod-normalized" class="admin-module hidden">
+                <h2 class="section-title" style="text-align: left;">Normalized Selected</h2>
+                <p style="color: #666; margin-bottom: 1.5rem;">Chuẩn hóa ảnh để tương thích 100% với Fashn VTON 1.5 (Tách nền, Resize, Phân loại).</p>
+
+                <div class="filter-bar">
+                    <select id="norm-filter-status" onchange="loadNormalizedList()">
+                        <option value="">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="processed">Processed</option>
+                        <option value="failed">Failed</option>
+                    </select>
+                    <select id="norm-filter-category" onchange="loadNormalizedList()">
+                        <option value="">All Categories</option>
+                        <option value="tops">Tops</option>
+                        <option value="bottoms">Bottoms</option>
+                        <option value="one-pieces">One-pieces</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="loadNormalizedList()" style="width:auto;"><i class="fas fa-sync"></i> Refresh</button>
+                    <button class="btn" onclick="runNormalizationSelected()" style="width:auto; background: var(--admin-pink); color:white; border:none; margin-left:auto;">
+                        <i class="fas fa-magic"></i> Normalize Selected
+                    </button>
+                    <button class="btn" onclick="deleteNormalizedSelected()" style="width:auto; background:#e57373; color:white; border:none;">
+                        <i class="fas fa-trash"></i> Remove
+                    </button>
+                </div>
+
+                <div class="admin-card">
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; text-align: left; border-collapse: collapse;">
+                            <thead class="table-header-blue">
+                                <tr>
+                                    <th style="padding: 15px; width: 40px;"><input type="checkbox" id="norm-select-all" onchange="toggleSelectAllNorm(this)"></th>
+                                    <th style="padding: 15px; width: 100px;">Original</th>
+                                    <th style="padding: 15px; width: 100px;">Normalized</th>
+                                    <th style="padding: 15px;">Product Name</th>
+                                    <th style="padding: 15px; width: 120px;">Category</th>
+                                    <th style="padding: 15px; width: 100px;">Status</th>
+                                    <th style="padding: 15px; width: 100px; text-align:center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="normalized-table-body">
+                                <tr><td colspan="7" style="padding:20px; text-align:center;">Loading...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -1542,6 +1592,8 @@
             // Load data if needed
             if (modId === 'products') {
                 loadProducts();
+            } else if (modId === 'normalized') {
+                loadNormalizedList();
             } else if (modId === 'users') {
                 loadUsers();
             } else if (modId === 'admin-staff') {
@@ -2022,10 +2074,18 @@
                         </div>
                     `;
 
-                    const isClean = p.clean_image_path && p.clean_image_path.trim() !== '';
-                    const cleanBadge = isClean 
-                        ? `<span style="background: rgba(72,199,116,0.1); color: #2e7d32; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(72,199,116,0.2);"><i class="fas fa-check"></i> Clean</span>`
-                        : `<span style="background: rgba(148,163,184,0.1); color: #64748b; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(148,163,184,0.2);"><i class="fas fa-clock"></i> Raw</span>`;
+                    const norm_status = p.norm_status || 'raw';
+                    let cleanBadge = '';
+                    if (norm_status === 'clean') {
+                        cleanBadge = `<span style="background: rgba(72,199,116,0.1); color: #2e7d32; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(72,199,116,0.2);"><i class="fas fa-check"></i> Clean</span>`;
+                    } else if (norm_status === 'pending' || norm_status === 'processing') {
+                        const icon = norm_status === 'processing' ? 'fa-spinner fa-spin' : 'fa-clock';
+                        cleanBadge = `<span style="background: rgba(139,169,201,0.1); color: var(--admin-blue); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid var(--admin-blue);"><i class="fas ${icon}"></i> ${norm_status === 'processing' ? 'Processing' : 'In Queue'}</span>`;
+                    } else if (norm_status === 'failed') {
+                        cleanBadge = `<span style="background: rgba(229,115,115,0.1); color: #e57373; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid #e57373;"><i class="fas fa-times-circle"></i> Failed</span>`;
+                    } else {
+                        cleanBadge = `<span style="background: rgba(148,163,184,0.1); color: #64748b; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(148,163,184,0.2);"><i class="fas fa-image"></i> Raw</span>`;
+                    }
 
                     // Actions column with edit/delete buttons
                     tr.innerHTML = `
@@ -2059,12 +2119,173 @@
             checkboxes.forEach(cb => cb.checked = master.checked);
         }
 
-        async function runNormalizationForSelected() {
+        async function addToNormalizedQueue() {
             const selected = Array.from(document.querySelectorAll('.product-checkbox:checked')).map(cb => parseInt(cb.value));
             if (selected.length === 0) return alert('Please select at least one product.');
-            if (!confirm(`Run AI Normalization for ${selected.length} items?`)) return;
-            await runNormalization(selected);
-            loadProducts(); // Refresh to see badges
+            
+            try {
+                const res = await fetch(`${API_URL}/admin/normalize-selected/add`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ product_ids: selected })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(data.message || `Successfully added ${data.added} products to Normalized Selected tab.`);
+                    // Uncheck all
+                    document.getElementById('select-all-products').checked = false;
+                    document.querySelectorAll('.product-checkbox').forEach(cb => cb.checked = false);
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Connection error');
+            }
+        }
+
+        async function loadNormalizedList() {
+            const tbody = document.getElementById('normalized-table-body');
+            const status = document.getElementById('norm-filter-status').value;
+            const category = document.getElementById('norm-filter-category').value;
+            
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;"><i class="fas fa-spinner fa-spin"></i> Loading...</td></tr>';
+            
+            try {
+                const res = await fetch(`${API_URL}/admin/normalized-selected?status=${status}&category=${category}`);
+                const data = await res.json();
+                
+                if (data.success) {
+                    renderNormalizedList(data.data);
+                } else {
+                    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: red;">${data.message}</td></tr>`;
+                }
+            } catch (e) {
+                console.error(e);
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: red;">Connection error</td></tr>';
+            }
+        }
+
+        function renderNormalizedList(items) {
+            const tbody = document.getElementById('normalized-table-body');
+            tbody.innerHTML = '';
+            
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No items found in queue.</td></tr>';
+                return;
+            }
+            
+            items.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.style.borderBottom = '1px solid #eee';
+                
+                const statusClass = item.status === 'processed' ? 'badge-active' : (item.status === 'failed' ? 'badge-blocked' : '');
+                const normImg = item.normalized_image ? `<img src="${item.normalized_image}" style="width: 60px; height: 60px; object-fit: contain; border: 1px solid #eee; border-radius: 4px;">` : '<span style="color:#ccc">Pending</span>';
+                
+                tr.innerHTML = `
+                    <td style="padding: 15px;"><input type="checkbox" class="norm-checkbox" value="${item.id}"></td>
+                    <td style="padding: 15px;"><img src="${item.original_image}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;"></td>
+                    <td style="padding: 15px;">${normImg}</td>
+                    <td style="padding: 15px; font-weight: 500;">${item.product_name}</td>
+                    <td style="padding: 15px;"><span class="norm-tag tag-blue">${item.category || 'N/A'}</span></td>
+                    <td style="padding: 15px;"><span class="${statusClass}">${item.status.toUpperCase()}</span></td>
+                    <td style="padding: 15px; text-align: center;">
+                        <button class="action-btn" style="color: var(--admin-blue);" onclick="downloadNormalized(${item.id})" ${item.status !== 'processed' ? 'disabled' : ''}><i class="fas fa-download"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function toggleSelectAllNorm(master) {
+            document.querySelectorAll('.norm-checkbox').forEach(cb => cb.checked = master.checked);
+        }
+
+        async function runNormalizationSelected() {
+            const selected = Array.from(document.querySelectorAll('.norm-checkbox:checked')).map(cb => parseInt(cb.value));
+            if (selected.length === 0) return alert('Please select at least one item.');
+            
+            const btn = document.querySelector('button[onclick="runNormalizationSelected()"]');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Starting...';
+            
+            try {
+                const res = await fetch(`${API_URL}/admin/normalize-selected/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: selected })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    // Start polling
+                    pollNormalizationStatus();
+                } else {
+                    alert('Error: ' + data.message);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-magic"></i> Normalize Selected';
+                }
+            } catch (e) {
+                console.error(e);
+                alert('Connection error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-magic"></i> Normalize Selected';
+            }
+        }
+
+        function pollNormalizationStatus() {
+            const btn = document.querySelector('button[onclick="runNormalizationSelected()"]');
+            const interval = setInterval(async () => {
+                try {
+                    const res = await fetch(`${API_URL}/admin/normalize-selected/status`);
+                    const data = await res.json();
+                    
+                    if (data.is_running) {
+                        const percentage = data.total > 0 ? Math.round((data.processed / data.total) * 100) : 0;
+                        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing... ${percentage}%`;
+                    } else {
+                        clearInterval(interval);
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-magic"></i> Normalize Selected';
+                        alert('Normalization complete!');
+                        loadNormalizedList();
+                    }
+                } catch (e) {
+                    console.error(e);
+                    clearInterval(interval);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-magic"></i> Normalize Selected';
+                }
+            }, 2000);
+        }
+
+        async function deleteNormalizedSelected() {
+            const selected = Array.from(document.querySelectorAll('.norm-checkbox:checked')).map(cb => parseInt(cb.value));
+            if (selected.length === 0) return alert('Please select items to remove.');
+            
+            if (!confirm(`Remove ${selected.length} items from this list?`)) return;
+            
+            try {
+                const res = await fetch(`${API_URL}/admin/normalize-selected/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: selected })
+                });
+                if (res.ok) {
+                    loadNormalizedList();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function downloadNormalized(id) {
+            // Simple logic: open image in new tab for now
+            const item = Array.from(document.querySelectorAll('.norm-checkbox')).find(cb => cb.value == id);
+            if (item) {
+                const row = item.closest('tr');
+                const img = row.querySelector('td:nth-child(3) img');
+                if (img) window.open(img.src, '_blank');
+            }
         }
 
         async function deleteSelectedProducts() {

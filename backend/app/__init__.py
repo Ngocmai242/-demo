@@ -136,6 +136,9 @@ def create_app():
 
     app.register_blueprint(main_bp)
 
+    from . import background_tasks
+    background_tasks.start_worker(app)
+
     return app
 
 
