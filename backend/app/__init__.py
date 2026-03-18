@@ -63,16 +63,28 @@ def _ensure_tryon_schema(db_path: str) -> None:
             ("body_shape_tag",  "TEXT DEFAULT ''"),
             ("garment_type",    "TEXT DEFAULT ''"),
             ("has_model",       "INTEGER DEFAULT 0"),
+            ("clean_image_path","TEXT DEFAULT ''"),
         ]
         for col_name, col_def in _migration_columns:
             if col_name not in existing_cols:
                 try:
                     cur.execute(f"ALTER TABLE products ADD COLUMN {col_name} {col_def}")
                     conn.commit()
-                    print(f"[Migration] Added column: {col_name}")
+                    print(f"[Migration] Added column to products: {col_name}")
                 except Exception:
                     pass # cột đã tồn tại, bỏ qua hoàn toàn
         # --- END MIGRATION ---
+
+        # --- OUTFIT MIGRATION ---
+        cur.execute("PRAGMA table_info(outfit)")
+        outfit_cols = {row[1] for row in cur.fetchall()}
+        if "clean_image_path" not in outfit_cols:
+            try:
+                cur.execute("ALTER TABLE outfit ADD COLUMN clean_image_path TEXT DEFAULT ''")
+                conn.commit()
+                print("[Migration] Added clean_image_path to outfit")
+            except Exception:
+                pass
 
         conn.commit()
         conn.close()

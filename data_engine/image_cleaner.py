@@ -1,13 +1,23 @@
 import os
 import sqlite3
 import requests
-import numpy as np
+import shutil
+import uuid
 from PIL import Image
 from io import BytesIO
 
+# Import the new smart processor
+try:
+    from .app.ai.product_processor import extract_main_product, split_multi_product_image
+except ImportError:
+    # Handle if run directly or as a script
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from backend.app.ai.product_processor import extract_main_product, split_multi_product_image
+
 def clean_product_image(image_url, item_id, output_dir):
     """
-    Tải ảnh từ image_url, phát hiện ảnh ghép, crop ô tốt nhất, resize 512x512 PNG.
+    Downloads image from image_url and uses the AI Processor to clean and crop it.
     """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
@@ -15,8 +25,11 @@ def clean_product_image(image_url, item_id, output_dir):
     file_name = f"{item_id}.png"
     file_path = os.path.join(output_dir, file_name)
     
+    # Temp path for the raw download
+    raw_path = os.path.join(output_dir, f"raw_{item_id}.jpg")
+    
     try:
-        # Tải ảnh
+        # Download image
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://shopee.vn/'
@@ -26,81 +39,26 @@ def clean_product_image(image_url, item_id, output_dir):
             print(f"[Cleaner] Failed to download {image_url}: {response.status_code}")
             return None
             
-        img = Image.open(BytesIO(response.content)).convert("RGB")
-        
-        # Chuyển sang grayscale để tính toán
-        img_gray = img.convert("L")
-        img_np = np.array(img_gray)
-        h, w = img_np.shape
-        
-        # Logic phát hiện ảnh ghép: Tính tổng pixel theo hàng và cột
-        # Ở đây dùng độ thay đổi trung bình của cột/hàng
-        row_means = np.mean(img_np, axis=1)
-        col_means = np.mean(img_np, axis=0)
-        
-        row_diffs = np.abs(np.diff(row_means))
-        col_diffs = np.abs(np.diff(col_means))
-        
-        # Ngưỡng phát hiện vạch chia (thay đổi đột ngột > 60% so với trung bình diff)
-        # Hoặc dùng một ngưỡng cố định dựa trên quan sát ảnh Shopee
-        # Thường vạch chia là các đường thẳng tắp có giá trị trung bình khác hẳn
-        
-        def find_split_indices(diffs, size):
-            threshold = np.mean(diffs) * 4 # Heuristic threshold
-            splits = np.where(diffs > threshold)[0]
-            if len(splits) == 0: return []
-            
-            # Lọc các index quá gần nhau (ví dụ vạch dày vài pixel)
-            filtered = [splits[0]]
-            for s in splits[1:]:
-                if s - filtered[-1] > size // 5: # Vạch phải cách nhau ít nhất 20% kích thước ảnh
-                    filtered.append(s)
-            return filtered
+        with open(raw_path, "wb") as f:
+            f.write(response.content)
 
-        h_splits = find_split_indices(row_diffs, h) # Đường cắt ngang -> chia hàng
-        v_splits = find_split_indices(col_diffs, w) # Đường cắt dọc -> chia cột
+        # Use the Smart Processor with u2net_cloth_seg to detach clothing from people
+        print(f"[Cleaner] AI cleaning image for {item_id} (using cloth_seg)...")
+        res_path = extract_main_product(raw_path, file_path, model_name="u2net_cloth_seg")
         
-        num_rows = len(h_splits) + 1
-        num_cols = len(v_splits) + 1
-        
-        # Nếu là ảnh đơn, giữ nguyên. Nếu là ảnh ghép, chọn ô tốt nhất.
-        if num_rows > 1 or num_cols > 1:
-            best_tile = None
-            max_std = -1
+        # Cleanup raw
+        if os.path.exists(raw_path):
+            os.remove(raw_path)
             
-            # Chia thành grid
-            tile_h = h // num_rows
-            tile_w = w // num_cols
-            
-            for r in range(num_rows):
-                for c in range(num_cols):
-                    left = c * tile_w
-                    top = r * tile_h
-                    right = left + tile_w
-                    bottom = top + tile_h
-                    
-                    # Thêm một chút padding vào trong để tránh vạch chia
-                    tile = img.crop((left + 2, top + 2, right - 2, bottom - 2))
-                    # Tính độ lệch chuẩn pixel để chọn ô rõ nhất (không phải màu trơn hoặc logo)
-                    tile_std = np.std(np.array(tile.convert("L")))
-                    
-                    if tile_std > max_std:
-                        max_std = tile_std
-                        best_tile = tile
-            img = best_tile
-
-        # Chuẩn hóa: Resize về 512x512, giữ tỉ lệ, đặt lên nền trắng
-        img.thumbnail((512, 512), Image.LANCZOS)
-        final_img = Image.new("RGB", (512, 512), (255, 255, 255))
-        w_small, h_small = img.size
-        final_img.paste(img, ((512 - w_small) // 2, (512 - h_small) // 2))
-        
-        final_img.save(file_path, "PNG")
-        # Trả về đường dẫn mà frontend có thể truy cập
-        return f"static/clean_images/{file_name}"
+        if res_path and os.path.exists(res_path):
+            # Return path relative to static root for frontend
+            return f"static/clean_images/{file_name}"
+        return None
         
     except Exception as e:
         print(f"[Cleaner] Error cleaning {item_id}: {e}")
+        if os.path.exists(raw_path):
+            os.remove(raw_path)
         return None
 
 def batch_clean_from_db(db_path, limit=100, overwrite=False):
@@ -131,14 +89,11 @@ def batch_clean_from_db(db_path, limit=100, overwrite=False):
         conn.close()
         return 0
         
-    # Determine the base directory (assuming we are in data_engine/)
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    # Save in frontend folder so Flask can serve it (since static_folder=frontend)
     SAVE_DIR = os.path.join(BASE_DIR, "frontend", "static", "clean_images")
-    DB_PATH = os.path.join(BASE_DIR, "database", "database_v2.db")
     output_dir = SAVE_DIR
     
-    print(f"[Cleaner] Processing {len(rows)} images...")
+    print(f"[Cleaner] Processing {len(rows)} images with YOLO+Rembg...")
     success_count = 0
     
     for i, row in enumerate(rows):
@@ -153,7 +108,7 @@ def batch_clean_from_db(db_path, limit=100, overwrite=False):
             cur.execute("UPDATE products SET clean_image_path = ? WHERE id = ?", (clean_path, cid))
             success_count += 1
             
-        if (i + 1) % 20 == 0:
+        if (i + 1) % 10 == 0: # Commit more frequently as YOLO/rembg are heavy
             conn.commit()
             print(f"[Cleaner] Handled {i+1}/{len(rows)}...")
             

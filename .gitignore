@@ -40,3 +40,9 @@ debug_output.log
 # Result Caches
 frontend/static/tryon_results/*
 !frontend/static/tryon_results/.gitkeep
+
+# AI Weights
+*.pt
+*.pth
+*.bin
+.env

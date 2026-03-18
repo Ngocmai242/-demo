@@ -445,8 +445,8 @@
 
     <div id="loading-overlay">
         <div class="spinner"></div>
-        <h2>✨ AI đang thay đồ cho bạn...</h2>
-        <p>Quá trình này có thể mất 30-60 giây. Vui lòng không tắt trang.</p>
+        <h2 id="loading-title">✨ AI đang thay đồ cho bạn...</h2>
+        <p id="loading-status">Quá trình này có thể mất 30-60 giây. Vui lòng không tắt trang.</p>
     </div>
 
     <div id="toast" class="toast"></div>
@@ -497,10 +497,12 @@
 
             const runBtn = document.getElementById('run-btn');
             const loading = document.getElementById('loading-overlay');
+            const statusText = document.getElementById('loading-status');
 
             try {
                 runBtn.disabled = true;
                 loading.style.display = 'flex';
+                statusText.textContent = "Đang chuẩn bị dữ liệu...";
 
                 const formData = new FormData();
                 formData.append('photo', selectedFile);
@@ -516,21 +518,83 @@
                     body: formData
                 });
 
-                const data = await response.json();
+                const initialData = await response.json();
 
-                if (data.success) {
-                    showResult(data);
-                    showToast('Thành công! AI đã phối đồ cho bạn.', 'success');
+                if (initialData.success) {
+                    if (initialData.task_id) {
+                        // Bắt đầu polling kết quả
+                        pollTaskStatus(initialData.task_id, initialData.recommended_outfits, initialData.tried_outfit);
+                    } else {
+                        // Cache hit hoặc xử lý nhanh
+                        showResult(initialData);
+                        showToast('Thành công! AI đã phối đồ cho bạn.', 'success');
+                        runBtn.disabled = false;
+                        loading.style.display = 'none';
+                    }
                 } else {
-                    showToast(data.message || 'Có lỗi xảy ra, vui lòng thử lại.', 'error');
+                    showToast(initialData.message || 'Có lỗi xảy ra, vui lòng thử lại.', 'error');
+                    runBtn.disabled = false;
+                    loading.style.display = 'none';
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Lỗi kết nối máy chủ hoặc AI đang bận.', 'error');
-            } finally {
+                showToast('Lỗi kết nối máy chủ.', 'error');
                 runBtn.disabled = false;
                 loading.style.display = 'none';
             }
+        }
+
+        async function pollTaskStatus(taskId, recommendedOutfits, triedOutfit) {
+            const statusText = document.getElementById('loading-status');
+            const runBtn = document.getElementById('run-btn');
+            const loading = document.getElementById('loading-overlay');
+            
+            let attempts = 0;
+            const maxAttempts = 120; // 120 giây tối đa
+
+            const interval = setInterval(async () => {
+                attempts++;
+                if (attempts > maxAttempts) {
+                    clearInterval(interval);
+                    showToast('Yêu cầu quá hạn. Vui lòng thử lại sau.', 'error');
+                    runBtn.disabled = false;
+                    loading.style.display = 'none';
+                    return;
+                }
+
+                try {
+                    const res = await fetch(`${API_BASE}/api/virtual-tryon/status/${taskId}`);
+                    const data = await res.json();
+
+                    if (data.status === 'completed') {
+                        clearInterval(interval);
+                        showResult({
+                            ...data,
+                            recommended_outfits: recommendedOutfits,
+                            tried_outfit: triedOutfit
+                        });
+                        
+                        if (data.is_fallback) {
+                            showToast('AI đang bận, hiển thị ảnh gốc. Bạn vẫn có thể xem các outfit gợi ý!', 'warning');
+                        } else {
+                            showToast('Thành công! AI đã phối đồ cho bạn.', 'success');
+                        }
+                        
+                        runBtn.disabled = false;
+                        loading.style.display = 'none';
+                    } else if (data.status === 'failed') {
+                        clearInterval(interval);
+                        showToast(data.message || 'AI xử lý thất bại.', 'error');
+                        runBtn.disabled = false;
+                        loading.style.display = 'none';
+                    } else {
+                        // Vẫn đang pending
+                        statusText.textContent = data.message || "Đang xử lý AI...";
+                    }
+                } catch (err) {
+                    console.error("Polling error:", err);
+                }
+            }, 2000); // Poll mỗi 2 giây
         }
 
         function showResult(data) {

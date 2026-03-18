@@ -154,6 +154,7 @@ class Outfit(db.Model):
     color = db.Column(db.String(50))
     color_tone = db.Column(db.String(50))
     shop_link = db.Column(db.String(500))
+    clean_image_path = db.Column(db.String(255))
 
 
 db.Index("ix_products_item_id", Product.item_id, unique=True)
