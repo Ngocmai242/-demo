@@ -30,5 +30,13 @@
   "Zenkonu Clothes": {
     "shop_name": "Zenkonu Clothes",
     "shop_url": "https://shopee.vn/zenkonu?categoryId=100011&entryPoint=ShopByPDP&itemId=16172489595"
+  },
+  "Blapink Shop": {
+    "shop_name": "Blapink Shop",
+    "shop_url": "https://shopee.vn/blapinkshop?categoryId=100017&entryPoint=ShopByPDP&itemId=20443702895"
+  },
+  "DABASS STORE": {
+    "shop_name": "DABASS STORE",
+    "shop_url": "https://shopee.vn/dabass.store?categoryId=100011&entryPoint=ShopByPDP&itemId=22934911080"
   }
 }

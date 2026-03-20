@@ -1948,7 +1948,8 @@ async function loadShopItems() {
                 return;
             }
             items.forEach(p => {
-                const price = p.price && Number(p.price) > 0 ? `$${(Number(p.price) / 100).toFixed(2)}` : '';
+                const actualPrice = (p.price && Number(p.price) > 0 && Number(p.price) < 1000) ? Number(p.price) * 1000 : Number(p.price);
+                const price = actualPrice > 0 ? `${actualPrice.toLocaleString('vi-VN')} VND` : '';
                 grid.innerHTML += `
                   <div class="card">
                     <img src="${p.image}" alt="${p.name}">
@@ -2253,7 +2254,8 @@ function displaySmartRecommendations(recs, occasion, shape, isFullSet = false, t
     `;
 
     recs.slice(0, 4).forEach((p, idx) => {
-        const price = p.price ? `${p.price.toLocaleString()} VND` : '';
+        const actualPrice = (p.price && p.price < 1000) ? p.price * 1000 : p.price;
+        const price = actualPrice ? `${actualPrice.toLocaleString('vi-VN')} VND` : '';
         const role = idx === 0 && isFullSet ? 'Key Piece' : 'Match';
         const isTryOn = targetId === 'tryon-result-area';
         

@@ -2888,7 +2888,8 @@ def product_detail(id):
         if 'image' in data or 'image_url' in data:
             new_img = data.get('image') or data.get('image_url')
             if new_img and new_img != product.image_url:
-                product.image_url = new_img
+                local_path = _download_image_to_uploads(new_img)
+                product.image_url = local_path or new_img
                 
                 # Chạy dọn dẹp ảnh ngầm (background) để tránh nghẽn thread chính của Flask
                 import threading
@@ -3439,7 +3440,7 @@ def remove_background_manual():
     """Chỉ thực hiện tách nền (Rembg) cho một sản phẩm cụ thể (Manual choice)."""
     data = request.get_json()
     product_id = data.get("product_id")
-    mode = data.get("mode", "standard") # 'standard' (u2netp) hoặc 'cloth' (u2net_cloth_seg)
+    mode = data.get("mode", "standard") # 'standard' (isnet-general-use) hoặc 'cloth' (u2net_cloth_seg)
 
     if not product_id:
         return jsonify({"success": False, "message": "Product ID required"}), 400
@@ -3467,7 +3468,7 @@ def remove_background_manual():
         out_path = os.path.join(processed_dir, out_name)
         
         # Chọn model tùy theo mode
-        model_name = "u2net_cloth_seg" if mode == "cloth" else "u2netp"
+        model_name = "u2net_cloth_seg" if mode == "cloth" else "isnet-general-use"
         
         print(f"[Manual BG] Mode: {model_name} | Input: {local_raw}")
         result_path = extract_main_product(local_raw, out_path, model_name=model_name)

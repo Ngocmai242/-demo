@@ -8,6 +8,7 @@ from .ai.product_processor import process_garment_for_vton
 from .utils import download_garment_image
 import os
 import time
+import uuid
 import unicodedata
 
 # Hàng đợi xử lý nền
@@ -137,17 +138,17 @@ def process_single_item(item_id, app):
                     out_name = f"vton_garment_{uuid.uuid4().hex}.png"
                     out_path = os.path.join(norm_dir, out_name)
                     
-                    # Nếu ảnh có người mẫu, dùng cloth_seg, nếu không dùng u2netp (nhanh hơn)
-                    m_name = "u2net_cloth_seg" if img_type == 'model' else "u2netp"
+                    # Nếu ảnh có người mẫu, dùng cloth_seg, nếu không dùng isnet-general-use (cực kỳ sạch nền)
+                    m_name = "u2net_cloth_seg" if img_type == 'model' else "isnet-general-use"
                     
                     try:
                         res = extract_main_product(local_raw, out_path, model_name=m_name)
                         if res: paths = [res]
                     except Exception as e:
                         print(f"[Worker] Primary extraction failed: {e}. Trying fallback model.")
-                        # Fallback cuối cùng sang u2netp nếu cloth_seg bị lỗi
+                        # Fallback cuối cùng sang isnet-general-use nếu cloth_seg bị lỗi
                         try:
-                            res = extract_main_product(local_raw, out_path, model_name="u2netp")
+                            res = extract_main_product(local_raw, out_path, model_name="isnet-general-use")
                             if res: paths = [res]
                         except Exception as e2:
                             print(f"[Worker] All extraction attempts failed for {item_id}: {e2}")
@@ -161,12 +162,12 @@ def process_single_item(item_id, app):
                     item.normalized_image_path = primary_rel
                     item.normalized_image_paths = json.dumps(rel_list)
                     
-                    # Cập nhật cả bảng Product để đồng bộ
-                    if item.product:
-                        item.product.clean_image_path = primary_rel
-                        item.product.clean_image_paths = json.dumps(rel_list)
-                        item.product.has_model = (img_type == 'model')
-                        item.product.image_type = img_type
+                    # Giữ nguyên ảnh gốc ở danh sách chính, chỉ lưu kết quả vào bảng NormalizedProduct
+                    # if item.product:
+                    #     item.product.clean_image_path = primary_rel
+                    #     item.product.clean_image_paths = json.dumps(rel_list)
+                    #     item.product.has_model = (img_type == 'model')
+                    #     item.product.image_type = img_type
                     
                     # Phân loại lại dựa trên tên sản phẩm
                     product_name = item.product.name if item.product else ""

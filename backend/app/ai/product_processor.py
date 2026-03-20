@@ -19,10 +19,11 @@ def get_yolo_model():
         _model = YOLO('yolov8n.pt')
     return _model
 
-def get_rembg_session(model_name="u2netp"):
+def get_rembg_session(model_name="isnet-general-use"):
     """
-    u2netp: nhanh, nhẹ (default)
-    u2net_cloth_seg: chuyên dụng cho quần áo (FASHN VTON recommend)
+    isnet-general-use: SOTA cho tách nền cực chuẩn (không dính rác, text).
+    isnet-general-use: Chuẩn hơn u2netp.
+    u2net_cloth_seg: chuyên dụng cho quần áo có người mặc.
     """
     global _rembg_sessions
     if model_name not in _rembg_sessions:
@@ -75,42 +76,51 @@ def extract_main_product(input_path, output_path=None, model_name="u2net_cloth_s
                 img_nobg = remove(img)
         except Exception as e:
             print(f"[Processor] Primary segmentation failed: {e}. Falling back to default.")
-            # Fallback sang model mặc định u2netp nếu model_name kia lỗi
-            default_session = get_rembg_session("u2netp")
+            # Fallback sang model mặc định phổ biến isnet-general-use
+            default_session = get_rembg_session("isnet-general-use")
             img_nobg = remove(img, session=default_session) if default_session else remove(img)
             
-        # --- CẢI TIẾN: Xử lý Mask để lấp đầy lỗ hổng (do tay che) ---
+        # --- CẢI TIẾN: Sửa lỗi áo màu Caro/Plaid bị AI phân mảnh ---
         # Chuyển sang numpy để xử lý OpenCV
         img_np = np.array(img_nobg)
         alpha = img_np[:, :, 3]
         
-        # 1. Khử nhiễu và lấp đầy các lỗ hổng nhỏ (Morphological Closing)
-        # Điều này giúp nối lại các phần bị tay người hoặc vật cản cắt đứt
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-        alpha_closed = cv2.morphologyEx(alpha, cv2.MORPH_CLOSE, kernel, iterations=2)
+        # Binary alpha để tính toán hình học chính xác
+        _, binary_alpha = cv2.threshold(alpha, 10, 255, cv2.THRESH_BINARY)
         
-        # 2. Tìm contours của mask đã được làm sạch
-        contours, _ = cv2.findContours(alpha_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Tạo kernel động nở rộng (Dilation) dựa trên kích thước ảnh (~4% kích thước max)
+        # Việc nở rộng (Dilate) sẽ nối tất cả các mảnh vụn của cùng 1 áo bị AI cắt hỏng thành 1 khối duy nhất!
+        img_h, img_w = binary_alpha.shape
+        k_size = int(max(img_w, img_h) * 0.04)
+        if k_size % 2 == 0: k_size += 1
+        if k_size < 11: k_size = 11
+        
+        dilation_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k_size, k_size))
+        bloated_mask = cv2.dilate(binary_alpha, dilation_kernel, iterations=1)
+        
+        # Tìm contours trên khối đã được nở rộng kết dính
+        contours, _ = cv2.findContours(bloated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         if contours:
-            # --- THÊM: Inpainting cơ bản để xóa tay người đè lên áo ---
-            # Chỉ thực hiện nếu phát hiện có vùng da người nằm đè lên áo
-            hsv = cv2.cvtColor(img_np[:, :, :3], cv2.COLOR_RGB2HSV)
-            lower_skin = np.array([0, 20, 70], dtype=np.uint8)
-            upper_skin = np.array([20, 255, 255], dtype=np.uint8)
-            skin_mask = cv2.inRange(hsv, lower_skin, upper_skin)
-            
-            # Vùng cần inpaint là vùng da nằm bên trong mask của áo
-            mask_to_inpaint = cv2.bitwise_and(skin_mask, alpha_closed)
-            
-            if np.any(mask_to_inpaint > 0):
-                # Làm rộng mask inpaint một chút để xóa sạch biên tay
-                mask_to_inpaint = cv2.dilate(mask_to_inpaint, np.ones((3,3), np.uint8), iterations=1)
-                img_np[:, :, :3] = cv2.inpaint(img_np[:, :, :3], mask_to_inpaint, 3, cv2.INPAINT_TELEA)
-
-            # Lấy contour lớn nhất (giả định là sản phẩm chính)
+            # Lấy contour LỚN NHẤT (Khối sản phẩm chính đã kết dính)
             main_contour = max(contours, key=cv2.contourArea)
-            x, y, w, h = cv2.boundingRect(main_contour)
+            
+            # --- TÁCH CHUẨN 1 SẢN PHẨM & LOẠI BỎ RÁC ---
+            # Vẽ khối sản phẩm chính lên một mask trắng tinh
+            clean_bloated = np.zeros_like(binary_alpha)
+            cv2.drawContours(clean_bloated, [main_contour], -1, 255, -1)
+            
+            # Khôi phục nguyên trạng Alpha ban đầu nhưng CHỈ LẤY những vị trí nằm trong khối sản phẩm chính
+            # Qua đó, các dải/mảnh vỡ của áo Caro được cứu sống 100%, trong khi Watermark/Sản phẩm thừa ở xa bị xóa sạch!
+            alpha_closed = cv2.bitwise_and(alpha, clean_bloated)
+            
+            # Tìm lại Contour cuối cùng để tính toán Bounding Box chính xác cho việc Crop
+            final_contours, _ = cv2.findContours(alpha_closed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if final_contours:
+                final_main_contour = max(final_contours, key=cv2.contourArea)
+                x, y, w, h = cv2.boundingRect(final_main_contour)
+            else:
+                x, y, w, h = 0, 0, img_w, img_h
             
             # 3. Tính toán padding thông minh (15% thay vì 10% để tránh mất góc)
             max_dim = max(w, h)
@@ -193,7 +203,7 @@ def process_garment_for_vton(input_path, output_dir):
         return extract_main_product(input_path, res, model_name="u2net_cloth_seg")
     except Exception as e:
         print(f"[Processor] Specialized seg failed, falling back to simple remove: {e}")
-        return extract_main_product(input_path, res, model_name="u2netp")
+        return extract_main_product(input_path, res, model_name="isnet-general-use")
 
 def split_multi_product_image(image_path, output_dir):
     """Ảnh grid Shopee thường có nhiều item, cần tách ra."""

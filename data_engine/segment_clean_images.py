@@ -59,8 +59,8 @@ def process_flat_image(img_raw, out_filename):
     """Simple background removal for flat-lay images."""
     out_dir = _out_dir()
     out_path = os.path.join(out_dir, out_filename)
-    # Using u2netp for speed and accuracy on simple backgrounds
-    return [extract_main_product(img_raw, out_path, model_name="u2netp")]
+    # Using isnet-general-use for high precision without watermarks
+    return [extract_main_product(img_raw, out_path, model_name="isnet-general-use")]
 
 def process_with_human(img_raw, out_filename):
     """Smart garment extraction from model photos."""

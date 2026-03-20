@@ -1035,6 +1035,7 @@
                             <thead class="table-header-blue">
                                 <tr>
                                     <th style="padding: 15px; width: 40px;"><input type="checkbox" id="norm-select-all" onchange="toggleSelectAllNorm(this)"></th>
+                                    <th style="padding: 15px; width: 50px;">#</th>
                                     <th style="padding: 15px; width: 100px;">Original</th>
                                     <th style="padding: 15px; width: 100px;">Normalized</th>
                                     <th style="padding: 15px;">Product Name</th>
@@ -2076,8 +2077,9 @@
                     tr.style.borderBottom = '1px solid #f0f0f0';
                     tr.style.height = '60px'; // Consistent height
 
-                    const priceFormatted = p.price ? p.price.toLocaleString() + ' VND' : '0 VND';
-                    const rawImage = p.clean_image_path || p.image || p.image_url || '';
+                    const actualPrice = (p.price && p.price < 1000) ? p.price * 1000 : p.price;
+                    const priceFormatted = actualPrice ? actualPrice.toLocaleString('vi-VN') + ' VND' : '0 VND';
+                    const rawImage = p.image || p.image_url || p.clean_image_path || '';
                     let imgSrc = rawImage || 'https://via.placeholder.com/50';
                     
                     // Multi-image display logic
@@ -2141,8 +2143,6 @@
                         <td style="text-align: center;">${normHtml}</td>
                         <td style="text-align: center;">${displayLink}</td>
                         <td style="text-align: center;">
-                            <button class="action-btn" onclick="removeBackgroundOnly(${p.id}, 'standard', this)" title="Remove BG Only (Flat/Simple)" style="color: #48c774;"><i class="fas fa-eraser"></i></button>
-                            <button class="action-btn" onclick="runNormalization([${p.id}])" title="AI Standardize (Full Pipeline)" style="color: var(--admin-pink);"><i class="fas fa-magic"></i></button>
                             <button class="action-btn" style="color: var(--admin-blue);" onclick="openEditModal(${p.id})"><i class="fas fa-edit"></i></button>
                             <button class="action-btn delete" style="color: #e57373;" onclick="deleteProduct(${p.id})"><i class="fas fa-trash-alt"></i></button>
                         </td>
@@ -2222,7 +2222,7 @@
                 return;
             }
             
-            items.forEach(item => {
+            items.forEach((item, index) => {
                 const tr = document.createElement('tr');
                 tr.style.borderBottom = '1px solid #eee';
                 
@@ -2247,6 +2247,7 @@
                 
                 tr.innerHTML = `
                     <td style="padding: 15px;"><input type="checkbox" class="norm-checkbox" value="${item.id}"></td>
+                    <td style="padding: 15px; font-weight: bold; color: #666; text-align: center;">${index + 1}</td>
                     <td style="padding: 15px;"><img src="${item.original_image}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;"></td>
                     <td style="padding: 15px;">${normImg}</td>
                     <td style="padding: 15px; font-weight: 500;">${item.product_name}</td>
@@ -2704,9 +2705,9 @@
                     body: JSON.stringify({
                         name,
                         price: price,
-                        image,
-                        image_url: image, // Use image_url for consistency with backend PUT handler
-                        shopee_url,
+                        image_url: image, 
+                        shopee_url: shopee_url,
+                        product_url: shopee_url,
                         category,
                         sub_category,
                         style,
@@ -2826,7 +2827,8 @@
                 tr.onmouseover = () => tr.style.background = '#f8fafc';
                 tr.onmouseout = () => tr.style.background = 'transparent';
                 
-                const priceText = p.price_display || (p.price ? p.price.toLocaleString() + 'đ' : '0đ');
+                const actualPriceRow = (p.price && p.price < 1000) ? p.price * 1000 : p.price;
+                const priceText = p.price_display || (actualPriceRow ? actualPriceRow.toLocaleString('vi-VN') + 'đ' : '0đ');
                 
                 // Categorization Logic (Ensuring English)
                 let displayCat = p.ai_category || p.category || 'Clothing';

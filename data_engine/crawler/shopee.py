@@ -76,8 +76,6 @@ class ShopeeCrawler:
     def _price(self, price_val) -> float:
         """
         Chuẩn hóa giá về đơn vị VND đầy đủ như trên Shopee.
-        - 69.999 đ trên Shopee  → 69999
-        - Nếu Shopee trả nội bộ 6.999.900 (x100) → chia 100 → 69999
         """
         if not price_val:
             return 0.0
@@ -89,11 +87,16 @@ class ShopeeCrawler:
             else:
                 num = float(price_val)
 
-            # Bước 2: nếu số quá lớn nhưng chia 100 ra < 1.000.000 → coi là dạng nội bộ x100
-            # Ví dụ: 6_999_900 → 69_999; 4_900_000 → 49_000
+            # Bước 2: Shopee thường lưu giá nội bộ nhân với 100,000 (vd: 69,999 -> 6999900000)
+            if num >= 10_000_000:
+                candidate = num / 100000.0
+                if candidate >= 1000 and candidate <= 50_000_000:
+                    return candidate
+
+            # Dự phòng chia 100 như logic cũ nếu có trường hợp cá biệt
             if num >= 1_000_000:
                 candidate = num / 100.0
-                if candidate <= 1_000_000:
+                if candidate <= 5_000_000:
                     return candidate
 
             # Còn lại: coi như đã là VND thật
