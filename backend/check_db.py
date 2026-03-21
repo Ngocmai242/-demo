@@ -1,20 +1,25 @@
-import os
-import sys
+import sqlite3
+db = sqlite3.connect('database/database_v2.db')
+c = db.cursor()
 
-# Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Gender distribution
+c.execute("SELECT gender, COUNT(*) FROM products GROUP BY gender")
+print("=== Gender Distribution ===")
+for r in c.fetchall():
+    print(r)
 
-from app import create_app, db
-from app.models import Product
+# Male products sample
+c.execute("SELECT name, gender, category_label, clean_image_path FROM products WHERE gender LIKE '%male%' OR gender LIKE '%Male%' LIMIT 5")
+print("\n=== Male Products Sample ===")
+for r in c.fetchall():
+    print(r)
 
-def check_db():
-    app = create_app()
-    with app.app_context():
-        count = Product.query.count()
-        print(f"Total products in DB: {count}")
-        if count > 0:
-            p = Product.query.first()
-            print(f"First product: {p.name} (Shop: {p.shop_name})")
+# Products with clean_image_path (normalized)
+c.execute("SELECT COUNT(*) FROM products WHERE clean_image_path IS NOT NULL AND clean_image_path != ''")
+print("\n=== Products with clean_image_path ===", c.fetchone())
 
-if __name__ == '__main__':
-    check_db()
+# Male products with clean
+c.execute("SELECT COUNT(*) FROM products WHERE (gender='male' OR gender='Male') AND clean_image_path IS NOT NULL")
+print("Male with clean_image_path:", c.fetchone())
+
+db.close()

@@ -210,47 +210,88 @@ def is_busy_error(exception):
 )
 def call_fashn_vton_raw(person_path, garment_path, fashn_cat, space_id, hf_token):
     try:
-        from gradio_client import Client, handle_file as file_helper
+        from gradio_client import Client, handle_file as _hf
     except ImportError:
-        from gradio_client import Client, file as file_helper
-        
+        try:
+            from gradio_client import Client, file as _hf
+        except ImportError:
+            raise ImportError("gradio_client not installed")
+
     print(f"[FASHN-VTON] Connecting to {space_id}...")
     _wake_space(space_id)
-    client = Client(space_id, hf_token=hf_token) if hf_token else Client(space_id)
-    
-    # fashn-vton-1.5 signature: person_image, garment_image, category
-    # Some mirrors might use api_name='/run' or '/predict'
+
+    client_kwargs = {}
+    if hf_token:
+        client_kwargs['hf_token'] = hf_token
+
+    client = Client(space_id, **client_kwargs)
+
+    # Check what API the space exposes
     try:
-        result = client.predict(
-            person_image=file_helper(person_path),
-            garment_image=file_helper(garment_path),
-            category=fashn_cat,
-        )
-    except Exception as e:
-        print(f"[FASHN-VTON] Keyword 'person_image' failed, trying 'model_image'...")
-        # Fallback to model_image if person_image fails (some mirrors use it)
-        result = client.predict(
-            model_image=file_helper(person_path),
-            garment_image=file_helper(garment_path),
-            category=fashn_cat,
-        )
-    return result
+        api_info = client.view_api(print_info=False)
+        print(f"[FASHN-VTON] API endpoints: {list(api_info.get('named_endpoints', {}).keys())}")
+    except:
+        api_info = {}
+
+    named = api_info.get('named_endpoints', {})
+
+    # Try the correct fashn-vton-1.5 API format
+    # The Space signature is: fn(person_image, garment_image, category, ...)
+    # person_image is ImageEditor (dict with background/layers/composite)
+    # garment_image is Image (filepath)
+    # category is Dropdown: 'tops' | 'bottoms' | 'one-pieces'
+
+    person_payload = {"background": _hf(person_path), "layers": [], "composite": None}
+
+    # Try /run endpoint first (official fashn-vton-1.5)
+    endpoints_to_try = list(named.keys()) if named else ["/run", "/predict", "/infer"]
+    if "/run" not in endpoints_to_try:
+        endpoints_to_try = ["/run"] + endpoints_to_try
+
+    last_err = None
+    for ep in endpoints_to_try:
+        try:
+            print(f"[FASHN-VTON] Trying endpoint {ep}...")
+            result = client.predict(
+                person_image=person_payload,
+                garment_image=_hf(garment_path),
+                category=fashn_cat,
+                api_name=ep,
+            )
+            print(f"[FASHN-VTON] endpoint {ep} SUCCESS -> {type(result)}")
+            return result
+        except Exception as e:
+            last_err = e
+            print(f"[FASHN-VTON] endpoint {ep} failed: {e}")
+            # Try with positional args as fallback
+            try:
+                result = client.predict(
+                    person_payload,
+                    _hf(garment_path),
+                    fashn_cat,
+                    api_name=ep,
+                )
+                print(f"[FASHN-VTON] positional endpoint {ep} SUCCESS")
+                return result
+            except Exception as e2:
+                last_err = e2
+                print(f"[FASHN-VTON] positional endpoint {ep} failed: {e2}")
+                continue
+
+    raise last_err or RuntimeError("All FASHN VTON endpoints failed")
 
 def call_fashn_vton(person_path, garment_path, category="tops"):
     """
-    Calls FASHN VTON v1.5 on Hugging Face (FREE 100%).
+    Calls FASHN VTON v1.5 on Hugging Face.
     category in ["tops", "bottoms", "one-pieces"]
+    Returns (local_result_path, is_fallback)
     """
     try:
-        try:
-            from gradio_client import Client, handle_file
-        except ImportError:
-            from gradio_client import Client, file
+        from gradio_client import Client  # just check import available
     except ImportError:
         print("[FASHN-VTON] gradio_client missing")
         return person_path, True
 
-    # Use the official FASHN VTON space or a reliable mirror
     space_id = "fashn-ai/fashn-vton-1.5"
     hf_token = os.getenv("HF_TOKEN", "")
     
@@ -263,28 +304,40 @@ def call_fashn_vton(person_path, garment_path, category="tops"):
     fashn_cat = cat_map.get(str(category).lower(), "tops")
 
     try:
-        # Use the raw caller with retry
         result = call_fashn_vton_raw(person_path, garment_path, fashn_cat, space_id, hf_token)
-        
-        # Result processing
-        result_raw = result[0] if isinstance(result, (list, tuple)) else result
-        if isinstance(result_raw, dict):
-            result_raw = result_raw.get("path") or result_raw.get("url") or str(result_raw)
+        print(f"[FASHN-VTON] Raw result type: {type(result)}, value: {str(result)[:300]}")
 
-        results_dir = os.path.join(current_app.static_folder, "static", "tryon_results")
-        os.makedirs(results_dir, exist_ok=True)
+        # Extract the output image path from the result
+        result_path = None
+        if isinstance(result, (list, tuple)) and len(result) > 0:
+            item = result[0]
+            if isinstance(item, dict):
+                result_path = item.get("path") or item.get("url") or item.get("value")
+            elif isinstance(item, str):
+                result_path = item
+        elif isinstance(result, dict):
+            result_path = result.get("path") or result.get("url") or result.get("value")
+        elif isinstance(result, str):
+            result_path = result
+
+        if not result_path or not os.path.exists(str(result_path)):
+            print(f"[FASHN-VTON] Result path invalid or not found: {result_path}")
+            return person_path, True
+
+        # Copy to the same folder as person image so the worker can handle it
         out_name = f"fashn_{uuid.uuid4().hex}.png"
-        out_path = os.path.join(results_dir, out_name)
-        shutil.copy(str(result_raw), out_path)
+        out_path = os.path.join(os.path.dirname(person_path), out_name)
+        shutil.copy(str(result_path), out_path)
         
         print(f"[FASHN-VTON] SUCCESS -> {out_path}")
         return out_path, False
+
     except Exception as e:
-        print(f"[FASHN-VTON] FAIL after retries: {e}")
+        import traceback
+        traceback.print_exc()
+        print(f"[FASHN-VTON] FAIL: {type(e).__name__}: {e}")
         return person_path, True
 
-    except Exception:
-        return 0.0
 
 def _get_image_similarity(path1, path2):
     """Simple check if two images are the same (pixel-wise or hash)"""
@@ -593,14 +646,23 @@ def get_recommended_outfits(gender, occasion, style, body_shape, budget, garment
     try:
         query = Product.query
         
-        # Gender filter
-        if gender and gender.lower() != 'unisex':
-             # Match specific gender or unisex items
-             query = query.filter((Product.gender == gender) | (Product.gender == 'unisex'))
+        # Gender filter - case-insensitive to handle 'male'/'Male'/'MALE' in DB
+        if gender and gender.lower() not in ('unisex', 'any'):
+            g_lower = gender.lower()  # e.g. 'male' or 'female'
+            g_title = gender.title()  # e.g. 'Male' or 'Female'
+            g_upper = gender.upper()  # e.g. 'MALE' or 'FEMALE'
+            query = query.filter(
+                (Product.gender == g_lower) | (Product.gender == g_title) | (Product.gender == g_upper) |
+                (Product.gender == 'unisex') | (Product.gender == 'Unisex') | (Product.gender == 'UNISEX') |
+                (Product.gender == None)
+            )
         
-        # Occasion filter
+        # Occasion filter - don't apply if it would produce empty results
         if occasion and occasion.lower() != 'any':
-             query = query.filter(Product.occasion == occasion)
+             occasion_query = query.filter(Product.occasion == occasion)
+             if occasion_query.count() > 0:
+                 query = occasion_query
+             # else: skip occasion filter (too strict, no matching products)
              
         # Style filter
         if style and style.lower() != 'any':
