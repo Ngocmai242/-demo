@@ -726,6 +726,9 @@ def get_recommended_outfits(gender, occasion, style, body_shape, budget, garment
              if not products:
                   return _get_demo_products()
 
+        # FIX: Import NormalizedProduct để ưu tiên ảnh đã tách nền từ admin
+        from .models import NormalizedProduct
+
         results = []
         for p in products:
             it_name = p.item_type.name if getattr(p, "item_type", None) else (p.category_label or "")
@@ -738,15 +741,28 @@ def get_recommended_outfits(gender, occasion, style, body_shape, budget, garment
                     garment = f"{it_low} ({cat_low})"
                 elif it_low:
                     garment = it_low
+
+            # FIX: Ưu tiên ảnh đã normalize (tách nền sạch từ admin) thay vì clean_image_path thô
+            norm_entry = NormalizedProduct.query.filter_by(
+                product_id=p.id, status='processed'
+            ).first()
+            if norm_entry and norm_entry.normalized_image_path:
+                best_clean = norm_entry.normalized_image_path
+                print(f"[VTON] Product {p.id} ({p.name[:30]}): dùng normalized_image_path = {best_clean}")
+            else:
+                best_clean = getattr(p, "clean_image_path", None)
+
             results.append({
                 'id': p.id,
                 'name': p.name,
                 'price': p.price,
                 'image_url': p.image_url,
-                'clean_image_path': getattr(p, "clean_image_path", None),
+                'clean_image_path': best_clean,
                 'shopee_url': getattr(p, "shopee_url", None) or p.product_url or f"https://shopee.vn/search?keyword={p.name}",
                 'garment_type': garment,
-                'gender': (p.gender or "unisex").lower()
+                'gender': (p.gender or "unisex").lower(),
+                'category_label': getattr(p, 'category_label', None) or it_name,
+                'category': norm_entry.category if norm_entry and norm_entry.category else None,
             })
         return results
     except Exception as e:
@@ -3154,7 +3170,9 @@ def tryon():
 def _run_vton_pipeline(in_path, best_match, garment_type, recommended, cat, results_dir, out_path, static_folder_path):
     """
     Core VTON logic to be run in the worker thread.
+    Includes: background removal for person, normalized garment image priority.
     """
+    t_start = time.time()
     is_fallback = True
     final_path = in_path
 
@@ -3162,22 +3180,77 @@ def _run_vton_pipeline(in_path, best_match, garment_type, recommended, cat, resu
         if not clean_rel: return None
         try:
             rel = str(clean_rel).lstrip("/").replace("\\", "/")
-            abs_path = os.path.abspath(os.path.join(static_folder_path, rel))
+            # Thử với và không có prefix 'static/'
+            if not rel.startswith("static"):
+                abs_path = os.path.abspath(os.path.join(static_folder_path, rel))
+            else:
+                rel_clean = rel.replace("static/", "", 1)
+                abs_path = os.path.abspath(os.path.join(static_folder_path, rel_clean))
             if os.path.exists(abs_path): return abs_path
+            # Thử đường dẫn trực tiếp
+            if os.path.exists(clean_rel): return clean_rel
         except: pass
         return None
 
+    # --- FIX: Tách nền ảnh người dùng trước khi gửi VTON ---
+    person_path = in_path  # fallback nếu tách nền thất bại
     try:
+        print(f"[TRYON] [{time.time()-t_start:.1f}s] Bắt đầu tách nền ảnh người dùng...")
+        from .ai.image_tools import remove_background_rgba
+        from PIL import Image as _PIL_Image
+
+        # Resize về max 1024px để tách nền nhanh hơn (giảm ~50% thời gian)
+        img_pil = _PIL_Image.open(in_path)
+        max_side = max(img_pil.size)
+        if max_side > 1024:
+            scale = 1024.0 / max_side
+            new_w = int(img_pil.width * scale)
+            new_h = int(img_pil.height * scale)
+            img_pil = img_pil.resize((new_w, new_h), _PIL_Image.Resampling.LANCZOS)
+
+        import io as _io
+        buf = _io.BytesIO()
+        img_pil.save(buf, format='PNG')
+        img_bytes = buf.getvalue()
+
+        seg_bytes, _ = remove_background_rgba(img_bytes)  # dùng u2net_human_seg
+
+        seg_dir = os.path.join(os.path.dirname(in_path), 'segmented')
+        os.makedirs(seg_dir, exist_ok=True)
+        seg_name = f"person_seg_{os.path.basename(in_path)}.png"
+        person_path = os.path.join(seg_dir, seg_name)
+        with open(person_path, 'wb') as f:
+            f.write(seg_bytes)
+        print(f"[TRYON] [{time.time()-t_start:.1f}s] ✅ Tách nền người dùng xong -> {person_path}")
+    except Exception as seg_err:
+        print(f"[TRYON] [{time.time()-t_start:.1f}s] ⚠️  Tách nền thất bại (dùng ảnh gốc): {seg_err}")
+        person_path = in_path
+
+    try:
+        print(f"[TRYON] [{time.time()-t_start:.1f}s] Tải garment từ best_match...")
         # Download and process the garment for Single Item Try-On FIRST
         garment_url = best_match.get('image_url')
         shopee_url = best_match.get('shopee_url')
         clean_abs = _resolve_clean_abs(best_match.get("clean_image_path"))
         garment_raw_path = clean_abs or (download_garment_image(garment_url, shopee_url, save_dir=os.path.join(static_folder_path, 'uploads', 'tryon')) if garment_url else None)
         
+        # FIX: Nếu garment_raw_path là từ normalized, không cần process_garment_for_vton (vì đã sạch rồi)
         garment_path = None
         if garment_raw_path and os.path.exists(garment_raw_path):
-            processed_dir = os.path.join(static_folder_path, 'uploads', 'tryon', 'processed')
-            garment_path = process_garment_for_vton(garment_raw_path, processed_dir) or garment_raw_path
+            if clean_abs:  # Đã là ảnh sạch từ normalized, dùng trực tiếp
+                garment_path = garment_raw_path
+                print(f"[TRYON] [{time.time()-t_start:.1f}s] Dùng ảnh normalized (sạch): {garment_path}")
+            else:  # Ảnh chưa qua xử lý - cần process
+                processed_dir = os.path.join(static_folder_path, 'uploads', 'tryon', 'processed')
+                garment_path = process_garment_for_vton(garment_raw_path, processed_dir) or garment_raw_path
+                print(f"[TRYON] [{time.time()-t_start:.1f}s] Xử lý garment xong: {garment_path}")
+
+        # FIX: Ưu tiên category từ NormalizedProduct nếu có
+        effective_cat = cat
+        norm_cat = best_match.get('category')  # Lấy từ NormalizedProduct (do get_recommended_outfits đã nhét vào)
+        if norm_cat and norm_cat in ('tops', 'bottoms', 'one-pieces'):
+            effective_cat = norm_cat
+            print(f"[TRYON] Ưu tiên category từ NormalizedProduct: {effective_cat}")
 
         # Determine Rendering Flow (Single vs 2-Step)
         if garment_type.lower() == "full outfit":
@@ -3188,7 +3261,7 @@ def _run_vton_pipeline(in_path, best_match, garment_type, recommended, cat, resu
             # Step 2: Find a BOTTOM (Robust detection)
             bottom_item = next((x for x in recommended if any(k in str(x.get("garment_type") or "").lower() for k in ["bottom", "quan", "quần", "pants", "short", "jeans", "trouser"])), None)
             
-            current_person_path = in_path
+            current_person_path = person_path  # FIX: dùng ảnh đã tách nền
             
             # Render Top
             if top_item:
@@ -3232,20 +3305,21 @@ def _run_vton_pipeline(in_path, best_match, garment_type, recommended, cat, resu
 
         else:
             # Single Item Try-On (Default)
-            res_path, fb = call_fashn_vton(in_path, garment_path, category=cat) if garment_path else (in_path, True)
+            print(f"[TRYON] [{time.time()-t_start:.1f}s] Gọi FASHN VTON (cat={effective_cat})...")
+            res_path, fb = call_fashn_vton(person_path, garment_path, category=effective_cat) if garment_path else (person_path, True)
             
             # If FASHN failed, try IDM-VTON immediately
             if fb and garment_path:
-                print("[TRYON] FASHN VTON failed. Trying IDM-VTON...")
-                res_path, fb = call_idm_vton(in_path, garment_path)
+                print(f"[TRYON] [{time.time()-t_start:.1f}s] FASHN VTON thất bại. Thử IDM-VTON...")
+                res_path, fb = call_idm_vton(person_path, garment_path)
 
             # FIX BUG 1: Similarity Check -> Re-run with IDM-VTON as fallback if FASHN didn't change anything
             if not fb:
-                sim = _get_image_similarity(in_path, res_path)
-                print(f"[TRYON] Output similarity: {sim:.2%}")
+                sim = _get_image_similarity(person_path, res_path)
+                print(f"[TRYON] [{time.time()-t_start:.1f}s] Output similarity: {sim:.2%}")
                 if sim > 0.85:
                     print("[TRYON] Image didn't change enough (>85% similar). Trying IDM-VTON fallback...")
-                    res_path, fb = call_idm_vton(in_path, garment_path)
+                    res_path, fb = call_idm_vton(person_path, garment_path)
             
             final_path = res_path
             is_fallback = fb
@@ -3253,6 +3327,7 @@ def _run_vton_pipeline(in_path, best_match, garment_type, recommended, cat, resu
         # Copy to final out_path
         import shutil
         shutil.copyfile(final_path, out_path)
+        print(f"[TRYON] [{time.time()-t_start:.1f}s] ✅ Xong! is_fallback={is_fallback} -> {out_path}")
         return {"path": out_path, "is_fallback": is_fallback}
         
     except Exception as ai_err:
