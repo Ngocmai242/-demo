@@ -19,6 +19,12 @@ try:
         person_image=handle_file('t_person.jpg'),
         garment_image=handle_file('t_garm.jpg'),
         category="tops",
+        garment_photo_type="model",
+        num_timesteps=50,
+        guidance_scale=2.0,
+        seed=42,
+        segmentation_free=True,
+        api_name="/try_on"
     )
     print("SUCCESS", res)
 except Exception as e:

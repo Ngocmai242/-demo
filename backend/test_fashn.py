@@ -23,14 +23,14 @@ tmp = tempfile.mkdtemp()
 person_path  = os.path.join(tmp, "person.jpg")
 garment_path = os.path.join(tmp, "garment.jpg")
 try:
-    # Ảnh người mặc vest (giống ảnh test của bạn)
+    # Ảnh người mẫu (Unsplash)
     urllib.request.urlretrieve(
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=576&h=864&fit=crop",
+        "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=576&h=864&fit=crop",
         person_path
     )
-    # Ảnh sản phẩm (áo sơ mi)
+    # Ảnh sản phẩm áo (Unsplash)
     urllib.request.urlretrieve(
-        "https://images.unsplash.com/photo-1621072156002-e2fcced0b170?w=576&h=864&fit=crop",
+        "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=576&h=864&fit=crop",
         garment_path
     )
     print(f"    OK — lưu tại {tmp}")
@@ -45,10 +45,15 @@ try:
     client = Client("fashn-ai/fashn-vton-1.5", hf_token=HF_TOKEN)
     print("    Kết nối: OK")
     result = client.predict(
-        model_image=handle_file(person_path),
+        person_image=handle_file(person_path),
         garment_image=handle_file(garment_path),
         category="tops",
-        api_name="/run"
+        garment_photo_type="model",
+        num_timesteps=50,
+        guidance_scale=2.0,
+        seed=42,
+        segmentation_free=True,
+        api_name="/try_on"
     )
     out_path = result[0] if isinstance(result, (list, tuple)) else result
     if isinstance(out_path, dict):

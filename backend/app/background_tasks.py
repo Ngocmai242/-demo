@@ -31,11 +31,18 @@ def _norm_ascii(s: str) -> str:
 
 def infer_canonical_category_by_name(name: str) -> tuple[str, str]:
     n = _norm_ascii(name)
-    # Heuristic keywords
-    if any(k in n for k in ["chan vay", "skirt", "vay"]):
-        return "dresses_skirts", "skirt"
-    if any(k in n for k in ["dam ", " dress", "vay lien"]):
-        return "dresses_skirts", "dress"
+    # Heuristic keywords for Fashn VTON 1.5 standard
+    
+    # Rule 1: Ưu tiên nhận diện Váy/Đầm/Jumpsuit là 'one-pieces'
+    # "vay" đứng một mình thường là đầm trong văn cảnh bán hàng Shopee/Lazada, 
+    # ngoại trừ khi đi kèm với "chan" (chân váy).
+    if any(k in n for k in ["dam", "dress", "vay lien", "jumpsuit", "set vay", "bodysuit", "vay kieu", "vay tre vai", "vay xoe", "vay body"]):
+        if "chan vay" not in n:
+            return "one-pieces", "dress"
+    
+    # Rule 2: Chân váy hoặc Quần là 'bottoms'
+    if any(k in n for k in ["chan vay", "skirt"]):
+        return "bottoms", "skirt"
     if any(k in n for k in ["jean", "denim"]):
         return "bottoms", "jeans"
     if any(k in n for k in ["quan tay", "trouser", "quan au", "quan dai", "quan baggy", "quan ong suong", "quan jogger"]):
@@ -45,6 +52,7 @@ def infer_canonical_category_by_name(name: str) -> tuple[str, str]:
     if "quan" in n:
         return "bottoms", "trousers"
 
+    # Rule 3: Còn lại là 'tops'
     if any(k in n for k in ["croptop", "crop top", "crop", "ao ho eo", "baby tee"]):
         return "tops", "crop_top"
     if any(k in n for k in ["tshirt", "t-shirt", "tee", "ao thun", "ao phong", "ao canh"]):
@@ -56,6 +64,10 @@ def infer_canonical_category_by_name(name: str) -> tuple[str, str]:
     if any(k in n for k in ["khoac", "jacket", "blazer", "coat", "gi le"]):
         return "tops", "jacket"
     
+    # Bổ sung Rule 4: Nếu có "vay" mà không lọt vào Rule 1 (do thiếu keyword phụ)
+    if "vay" in n and "chan vay" not in n:
+        return "one-pieces", "dress"
+
     # Default safe
     return "tops", "t_shirt"
 
@@ -63,10 +75,21 @@ def map_category_to_fashn(db_category: str) -> str:
     if not db_category:
         return "tops"
     cat = str(db_category).lower().strip()
-    if cat.startswith("bottoms") or any(x in cat for x in ["quần", "jean", "jeans", "pants", "trousers", "shorts", "skirt", "legging"]):
-        return "bottoms"
-    if any(x in cat for x in ["dress", "one-piece", "jumpsuit", "romper", "đầm", "váy liền", "vay", "dam"]):
+    # Fashn VTON 1.5 standard categories: "tops", "bottoms", "one-pieces"
+    
+    # Rule 1: Ưu tiên váy/đầm vào 'one-pieces'
+    if any(k in cat for k in ["one-pieces", "dress", "jumpsuit", "romper", "đầm", "váy liền", "dam", "bodysuit"]):
         return "one-pieces"
+    
+    # Rule 2: Nếu là 'vay' (không phải chân váy)
+    if "vay" in cat and "chan vay" not in cat and "skirt" not in cat:
+        return "one-pieces"
+
+    # Rule 3: Các loại quần/chân váy vào 'bottoms'
+    if any(k in cat for k in ["bottoms", "bottom", "quan", "quần", "jeans", "pants", "trousers", "shorts", "skirt", "chan vay"]):
+        return "bottoms"
+        
+    # Rule 4: Mặc định là 'tops'
     return "tops"
 
 def process_single_item(item_id, app):
@@ -175,6 +198,13 @@ def process_single_item(item_id, app):
                     
                     # Map sang format Fashn VTON
                     item.category = map_category_to_fashn(db_cat)
+                    
+                    # Cập nhật Photo Type cho Fashn VTON 1.5
+                    if img_type == 'model':
+                        item.photo_type = 'model'
+                    else:
+                        item.photo_type = 'flat-lay'
+                        
                     item.status = "processed"
                     item.error_message = None
                     

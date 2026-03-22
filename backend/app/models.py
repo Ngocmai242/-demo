@@ -167,6 +167,7 @@ class NormalizedProduct(db.Model):
     original_image_url = db.Column(db.String(500))
     normalized_image_path = db.Column(db.String(500))
     category = db.Column(db.String(100))
+    photo_type = db.Column(db.String(50), default="model") # model, flat-lay
     status = db.Column(db.String(20), default="pending")  # pending, processed, failed
     error_message = db.Column(db.Text, nullable=True)
     normalized_image_paths = db.Column(db.Text, nullable=True, default='[]') # JSON list

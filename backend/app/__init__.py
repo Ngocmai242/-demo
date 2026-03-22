@@ -100,6 +100,11 @@ def _ensure_tryon_schema(db_path: str) -> None:
                     cur.execute("ALTER TABLE normalized_products ADD COLUMN normalized_image_paths TEXT DEFAULT '[]'")
                     conn.commit()
                 except Exception: pass
+            if "photo_type" not in norm_cols:
+                try:
+                    cur.execute("ALTER TABLE normalized_products ADD COLUMN photo_type TEXT DEFAULT 'model'")
+                    conn.commit()
+                except Exception: pass
 
         conn.commit()
         conn.close()

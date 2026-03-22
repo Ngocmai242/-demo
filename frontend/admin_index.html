@@ -1040,6 +1040,7 @@
                                     <th style="padding: 15px; width: 100px;">Normalized</th>
                                     <th style="padding: 15px;">Product Name</th>
                                     <th style="padding: 15px; width: 120px;">Category</th>
+                                    <th style="padding: 15px; width: 120px;">Photo Type</th>
                                     <th style="padding: 15px; width: 100px;">Status</th>
                                     <th style="padding: 15px; width: 100px; text-align:center;">Action</th>
                                 </tr>
@@ -2252,6 +2253,7 @@
                     <td style="padding: 15px;">${normImg}</td>
                     <td style="padding: 15px; font-weight: 500;">${item.product_name}</td>
                     <td style="padding: 15px;"><span class="norm-tag tag-blue">${item.category || 'N/A'}</span></td>
+                    <td style="padding: 15px;"><span class="norm-tag tag-purple">${item.photo_type || 'model'}</span></td>
                     <td style="padding: 15px;"><span class="${statusClass}">${item.status.toUpperCase()}</span></td>
                     <td style="padding: 15px; text-align: center; display: flex; gap: 5px; justify-content: center; align-items: center; height: 90px;">
                         <button class="action-btn" title="Remove BG Only (Eraser)" style="color: #48c774;" onclick="removeBackgroundOnly(${item.product_id}, 'standard', this)">

@@ -388,12 +388,11 @@
 
                 <div class="form-group">
                     <label>Loại đồ muốn thử</label>
-                    <select id="garment_type">
-                        <option value="any">Bất kỳ</option>
-                        <option value="tops">Áo (Tops)</option>
-                        <option value="bottoms">Quần (Bottoms)</option>
-                        <option value="dress">Đầm / Váy</option>
-                        <option value="full outfit">Full Outfit (Áo + Quần)</option>
+                    <select id="outfit_type">
+                        <option value="top">Áo</option>
+                        <option value="bottom">Quần / Chân váy</option>
+                        <option value="dress">Váy liền / Đầm</option>
+                        <option value="top_bottom">Full Outfit (Áo + Quần)</option>
                     </select>
                 </div>
 
@@ -408,8 +407,8 @@
                     </select>
                 </div>
 
-                <button class="magic-btn" id="run-btn" onclick="runTryOn()">
-                    <i class="fas fa-sparkles"></i> MAGIC COORDINATE
+                <button class="magic-btn" id="run-btn" onclick="fetchRecommendations()">
+                    <i class="fas fa-search"></i> TÌM OUTFIT PHÙ HỢP
                 </button>
             </div>
         </div>
@@ -456,11 +455,7 @@
         let selectedFile = null;
 
         function getParam(name) {
-            try {
-                return new URLSearchParams(window.location.search).get(name);
-            } catch (e) {
-                return null;
-            }
+            try { return new URLSearchParams(window.location.search).get(name); } catch(e){ return null; }
         }
 
         function handleFileSelect(input) {
@@ -489,76 +484,169 @@
             document.getElementById('preview-container').style.display = 'none';
         }
 
-        async function runTryOn() {
+        async function fetchRecommendations() {
             if (!selectedFile) {
-                showToast('Vui lòng tải ảnh người lên!', 'error');
+                showToast('Vui lòng tải ảnh người lên trước!', 'error');
                 return;
             }
 
             const runBtn = document.getElementById('run-btn');
             const loading = document.getElementById('loading-overlay');
             const statusText = document.getElementById('loading-status');
+            const loadingTitle = document.getElementById('loading-title');
 
             try {
                 runBtn.disabled = true;
                 loading.style.display = 'flex';
-                statusText.textContent = "Đang chuẩn bị dữ liệu...";
+                loadingTitle.innerHTML = '<i class="fas fa-search"></i> Đang tìm kiếm tủ đồ...';
+                statusText.textContent = "Hệ thống đang quét các sản phẩm Normalized phù hợp nhất...";
 
                 const formData = new FormData();
-                formData.append('photo', selectedFile);
                 formData.append('gender', document.getElementById('gender').value);
                 formData.append('occasion', document.getElementById('occasion').value);
                 formData.append('style', document.getElementById('style').value);
                 formData.append('body_shape', document.getElementById('body_shape').value);
                 formData.append('budget', document.getElementById('budget').value);
-                formData.append('garment_type', document.getElementById('garment_type') ? document.getElementById('garment_type').value : 'any');
+                formData.append('outfit_type', document.getElementById('outfit_type').value);
+
+                const response = await fetch(`${API_BASE}/api/recommend-products`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                loading.style.display = 'none';
+                runBtn.disabled = false;
+
+                if (data.success) {
+                    if(!data.results || data.results.length === 0){
+                        showToast('Không tìm thấy đồ phù hợp. Hãy thử thay đổi Ngân sách/Dáng người.', 'error');
+                    } else {
+                        showRecommendations(data.results, data.outfit_type);
+                    }
+                } else {
+                    showToast(data.message || 'Lỗi lấy gợi ý', 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Lỗi kết nối máy chủ API.', 'error');
+                runBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        }
+
+        function showRecommendations(results, outfitType) {
+            document.getElementById('result-empty').style.display = 'none';
+            document.getElementById('result-filled').style.display = 'block';
+            
+            // Ẩn ảnh VTON tạm thời
+            document.querySelector('.main-result-img').style.display = 'none';
+            document.getElementById('triedOutfitBanner').style.display = 'none';
+            
+            const container = document.getElementById('outfit-cards');
+            container.innerHTML = '';
+            
+            document.querySelector('.recommend-title').innerHTML = `<i class="fas fa-check-circle"></i> Vui lòng chọn 1 thẻ để "Thử lên người"`;
+            
+            results.forEach((res, index) => {
+                const card = document.createElement('div');
+                card.className = 'outfit-card';
+                card.style.cursor = 'pointer';
+                card.style.transition = 'transform 0.2s, box-shadow 0.2s';
+                card.onmouseover = () => { card.style.transform = 'scale(1.03)'; card.style.boxShadow = '0 8px 15px rgba(0,0,0,0.1)'; };
+                card.onmouseout = () => { card.style.transform = 'scale(1)'; card.style.boxShadow = 'none'; };
+                
+                // When clicking a card, run Phase 2
+                card.onclick = () => runTryOnPhase2(res.items);
+                
+                if (res.type === 'single') {
+                    const item = res.items[0];
+                    card.innerHTML = `
+                        <img src="${item.image_url}" alt="${item.name}" onerror="this.src='https://placehold.co/200x260?text=No+Image'">
+                        <div class="outfit-info">
+                            <div class="name">${item.name}</div>
+                            <div class="price">${formatPrice(item.price)}</div>
+                            <div class="shopee-tag">✨ BẤM ĐỂ THỬ</div>
+                        </div>
+                    `;
+                } else {
+                    const top = res.items[0];
+                    const bot = res.items[1];
+                    card.innerHTML = `
+                        <div style="display:flex; height: 140px; border-bottom: 2px solid #f0f0f0;">
+                            <img src="${top.image_url}" style="width:50%; object-fit:cover; border-right: 1px solid #f0f0f0;" title="${top.name}">
+                            <img src="${bot.image_url}" style="width:50%; object-fit:cover;" title="${bot.name}">
+                        </div>
+                        <div class="outfit-info">
+                            <div class="name"><b>Set kết hợp:</b> ${top.name.substring(0, 15)}... + Quần/Váy</div>
+                            <div class="price">COMBO Đôi</div>
+                            <div class="shopee-tag" style="background-color:#E91E63;">✨ THỬ CẢ BỘ</div>
+                        </div>
+                    `;
+                }
+                container.appendChild(card);
+            });
+
+            document.getElementById('result-filled').scrollIntoView({ behavior: 'smooth' });
+            showToast('Đã lọc ra đồ phù hợp. Vui lòng bấm vào 1 thẻ bài!', 'success');
+        }
+
+        async function runTryOnPhase2(garments) {
+            const loading = document.getElementById('loading-overlay');
+            const statusText = document.getElementById('loading-status');
+            const loadingTitle = document.getElementById('loading-title');
+            const runBtn = document.getElementById('run-btn');
+
+            try {
+                // Disable button to prevent double clicks
+                if (runBtn) runBtn.disabled = true;
+                
+                loading.style.display = 'flex';
+                loadingTitle.innerHTML = '✨ AI Đang May Đo...';
+                statusText.textContent = "Đang gửi yêu cầu tới Colab GPU... Vui lòng không tắt trang (Có thể mất 2-5 phút).";
+
+                const formData = new FormData();
+                formData.append('photo', selectedFile);
+                formData.append('garments', JSON.stringify(garments)); // Serialize mảng garments
 
                 const response = await fetch(`${API_BASE}/api/virtual-tryon`, {
                     method: 'POST',
                     body: formData
                 });
 
-                const initialData = await response.json();
+                const data = await response.json();
 
-                if (initialData.success) {
-                    if (initialData.task_id) {
-                        // Bắt đầu polling kết quả
-                        pollTaskStatus(initialData.task_id, initialData.recommended_outfits, initialData.tried_outfit);
-                    } else {
-                        // Cache hit hoặc xử lý nhanh
-                        showResult(initialData);
-                        showToast('Thành công! AI đã phối đồ cho bạn.', 'success');
-                        runBtn.disabled = false;
-                        loading.style.display = 'none';
-                    }
+                if (data.success && data.task_id) {
+                    pollTaskStatus(data.task_id);
                 } else {
-                    showToast(initialData.message || 'Có lỗi xảy ra, vui lòng thử lại.', 'error');
-                    runBtn.disabled = false;
+                    showToast(data.message || 'Có lỗi xảy ra khi bắt đầu Try-On', 'error');
                     loading.style.display = 'none';
+                    if (runBtn) runBtn.disabled = false;
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Lỗi kết nối máy chủ.', 'error');
-                runBtn.disabled = false;
+                showToast('Lỗi kết nối máy chủ AI VTON.', 'error');
                 loading.style.display = 'none';
+                if (runBtn) runBtn.disabled = false;
             }
         }
 
-        async function pollTaskStatus(taskId, recommendedOutfits, triedOutfit) {
+        async function pollTaskStatus(taskId) {
             const statusText = document.getElementById('loading-status');
-            const runBtn = document.getElementById('run-btn');
             const loading = document.getElementById('loading-overlay');
+            const runBtn = document.getElementById('run-btn');
             
             let attempts = 0;
-            const maxAttempts = 120; // 120 giây tối đa
+            const maxAttempts = 200; // Tăng lên ~8 phút (2.5s * 200 = 500s)
 
             const interval = setInterval(async () => {
                 attempts++;
                 if (attempts > maxAttempts) {
                     clearInterval(interval);
-                    showToast('Yêu cầu quá hạn. Vui lòng thử lại sau.', 'error');
-                    runBtn.disabled = false;
+                    showToast('Yêu cầu hết thời gian chờ (Timeout). AI có thể đang bận.', 'error');
                     loading.style.display = 'none';
+                    if (runBtn) runBtn.disabled = false;
                     return;
                 }
 
@@ -568,70 +656,62 @@
 
                     if (data.status === 'completed') {
                         clearInterval(interval);
-                        showResult({
-                            ...data,
-                            recommended_outfits: recommendedOutfits,
-                            tried_outfit: triedOutfit
-                        });
-                        
+                        showFinalResult(data);
                         if (data.is_fallback) {
-                            showToast('AI đang bận, hiển thị ảnh gốc. Bạn vẫn có thể xem các outfit gợi ý!', 'warning');
+                            showToast('AI Busy hoặc Lỗi: ' + (data.error_message || 'Đang dùng ảnh gốc'), 'error');
                         } else {
-                            showToast('Thành công! AI đã phối đồ cho bạn.', 'success');
+                            showToast('Thành công! Đã thay đồ xong.', 'success');
                         }
-                        
-                        runBtn.disabled = false;
                         loading.style.display = 'none';
+                        if (runBtn) runBtn.disabled = false;
                     } else if (data.status === 'failed') {
                         clearInterval(interval);
                         showToast(data.message || 'AI xử lý thất bại.', 'error');
-                        runBtn.disabled = false;
                         loading.style.display = 'none';
+                        if (runBtn) runBtn.disabled = false;
                     } else {
-                        // Vẫn đang pending
-                        statusText.textContent = data.message || "Đang xử lý AI...";
+                        // Cập nhật thông báo trạng thái sinh động hơn
+                        if (attempts < 10) statusText.textContent = "Đang khởi tạo pipeline trên GPU...";
+                        else if (attempts < 40) statusText.textContent = "Đang phân tích đặc điểm cơ thể (30%)...";
+                        else if (attempts < 80) statusText.textContent = "Đang tiến hành khử nhiễu (Denoising) - Vui lòng đợi...";
+                        else if (attempts < 120) statusText.textContent = "Đang tinh chỉnh chi tiết vải vóc (80%)...";
+                        else statusText.textContent = "Đang hoàn tất và chuẩn bị gửi ảnh về (95%)...";
                     }
                 } catch (err) {
                     console.error("Polling error:", err);
                 }
-            }, 2000); // Poll mỗi 2 giây
+            }, 2500);
         }
 
-        function showResult(data) {
-            document.getElementById('result-empty').style.display = 'none';
-            document.getElementById('result-filled').style.display = 'block';
+        function showFinalResult(data) {
+            document.querySelector('.main-result-img').style.display = 'block';
             document.getElementById('result-img').src = data.result_image_url + "?nocache=" + Date.now();
             
-            if (data.tried_outfit) {
-                const t = data.tried_outfit;
-                const banner = document.getElementById('triedOutfitBanner');
-                banner.innerHTML = `Đang mặc: <strong>${t.name}</strong> — ${formatPrice(t.price)} <a href="${t.shopee_url}" target="_blank" style="color: var(--rose); font-weight: bold; text-decoration: none; margin-left: 10px;">🛍 Mua ngay</a>`;
+            const banner = document.getElementById('triedOutfitBanner');
+            if (data.tried_items && data.tried_items.length > 0) {
+                let html = "<div style='margin-bottom: 12px; font-weight: bold; font-size: 1.1rem; color: var(--indigo); border-bottom: 2px solid var(--rose-light); padding-bottom: 8px;'>🛒 MUA OUTFIT BẠN ĐANG MẶC TRÊN ẢNH:</div>";
+                data.tried_items.forEach(t => {
+                    html += `
+                        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);'>
+                            <div style="display:flex; align-items:center; gap: 10px;">
+                                <img src="${t.image_url}" style="width:50px; height:50px; object-fit:cover; border-radius:4px;">
+                                <div>
+                                    <div style="font-weight: 600; font-size: 0.9rem; color: #333;">${t.name.substring(0, 40)}${t.name.length > 40 ? '...' : ''}</div>
+                                    <div style="color: var(--rose); font-weight: 700; font-size: 0.85rem;">${formatPrice(t.price)}</div>
+                                </div>
+                            </div>
+                            <a href="${t.url}" target="_blank" style="background: var(--rose); color: white; font-weight: bold; text-decoration: none; padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">MUA TRÊN SHOPEE</a>
+                        </div>
+                    `;
+                });
+                banner.innerHTML = html;
                 banner.style.display = 'block';
+                banner.style.background = '#f9f9f9';
+                banner.style.border = '1px solid #eee';
             } else {
-                document.getElementById('triedOutfitBanner').style.display = 'none';
+                banner.style.display = 'none';
             }
-            
-            const container = document.getElementById('outfit-cards');
-            container.innerHTML = '';
-            
-            data.recommended_outfits.forEach(item => {
-                const card = document.createElement('a');
-                card.href = item.shopee_url || '#';
-                card.target = "_blank";
-                card.rel = "noopener noreferrer";
-                card.className = 'outfit-card';
-                card.innerHTML = `
-                    <img src="${item.image_url}" alt="${item.name}" onerror="this.src='https://placehold.co/200x260?text=No+Image'">
-                    <div class="outfit-info">
-                        <div class="name">${item.name}</div>
-                        <div class="price">${formatPrice(item.price)}</div>
-                        <div class="shopee-tag">🛍 Shopee</div>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
 
-            // Scroll to result
             document.getElementById('result-filled').scrollIntoView({ behavior: 'smooth' });
         }
 
@@ -690,8 +770,10 @@
             }
         })();
 
-        // Drag & Drop
+        // Drag & Drop & Click
         const zone = document.getElementById('upload-zone');
+        zone.addEventListener('click', () => document.getElementById('file-input').click());
+        
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
             zone.addEventListener(evt, e => {
                 e.preventDefault();
