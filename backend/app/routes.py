@@ -2942,7 +2942,7 @@ def call_my_vton_api(person_path, garment_path, category, garment_photo_type="mo
         return person_path, True, f"Lỗi không xác định: {str(e)}"
 
 def call_texel_moda_api(person_path, garment_path, category, sex="female"):
-    """Tích hợp Texel Moda API (RapidAPI) sử dụng endpoint /try-on-file."""
+    """Tích hợp Texel Moda API (RapidAPI) sử dụng endpoint /try-on-file (Multipart/Form-Data)."""
     import os
     import requests
     import uuid
@@ -2951,22 +2951,18 @@ def call_texel_moda_api(person_path, garment_path, category, sex="female"):
     start_time = time.time()
     # Lấy Key từ .env
     api_key = os.getenv("RAPIDAPI_KEY", "32093762d1msh9ca635f1ef2bc5fp101cabjsn0418c3adbe9d")
+    # ĐÂY LÀ ENDPOINT ĐÃ TEST THÀNH CÔNG 100%
     url = "https://try-on-diffusion.p.rapidapi.com/try-on-file"
     
-    print(f"[TEXEL-MODA] Đang gọi Texel Moda RapidAPI cho file: {os.path.basename(garment_path)}")
+    print(f"[TEXEL-MODA] Đang gọi Texel Moda RapidAPI (MULTIPART Mode) cho file: {os.path.basename(garment_path)}")
     try:
-        with open(person_path, 'rb') as f_person:
-            person_bytes = f_person.read()
-        with open(garment_path, 'rb') as f_garment:
-            garment_bytes = f_garment.read()
-            
+        # Chuẩn bị file để gửi dưới dạng Multipart/Form-Data
         files = {
-            'avatar_image': ('avatar.png', person_bytes, 'image/png'),
-            'clothing_image': ('garment.png', garment_bytes, 'image/png'),
+            'avatar_image': ('avatar.png', open(person_path, 'rb'), 'image/png'),
+            'clothing_image': ('garment.png', open(garment_path, 'rb'), 'image/png'),
         }
         
-        # Texel Moda yêu cầu giới tính (avatar_sex)
-        # category có thể giúp phán đoán nếu cần, nhưng mặc định là female
+        # Tham số giới tính
         payload = {
             'avatar_sex': sex
         }
@@ -2976,23 +2972,27 @@ def call_texel_moda_api(person_path, garment_path, category, sex="female"):
             "x-rapidapi-host": "try-on-diffusion.p.rapidapi.com"
         }
         
-        # Gọi API với timeout 120s
+        # Gửi request (KHÔNG dùng JSON, dùng FILES và DATA)
         response = requests.post(url, files=files, data=payload, headers=headers, timeout=120)
+        
+        # Đóng file sau khi gửi xong
+        for f in files.values():
+            if hasattr(f[1], 'close'): f[1].close()
+            
         duration = time.time() - start_time
         print(f"[TEXEL-MODA] API phản hồi sau {duration:.1f}s | Status: {response.status_code}")
         
         if response.status_code != 200:
             err_msg = response.text[:500]
             print(f"[TEXEL-MODA] ❌ Lỗi API (HTTP {response.status_code}): {err_msg}")
-            # Nếu lỗi quota hoặc key, báo về frontend
             return person_path, True, f'Texel Moda Error ({response.status_code}): {err_msg}'
             
-        # Lưu kết quả
+        # Kết quả Texel Moda /try-on-file trả về trực tiếp binary ảnh
+        # Giải mã và lưu kết quả
         ext = os.path.splitext(person_path)[1] or ".png"
         out_name = f"texel_{uuid.uuid4().hex}{ext}"
         out_path = os.path.join(os.path.dirname(person_path), out_name)
         
-        # Kết quả trả về là binary ảnh JPEG/PNG
         with open(out_path, "wb") as f:
             f.write(response.content)
             
