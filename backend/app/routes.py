@@ -2941,7 +2941,73 @@ def call_my_vton_api(person_path, garment_path, category, garment_photo_type="mo
         print(f"[MY-VTON] ❌ Lỗi không xác định: {str(e)}")
         return person_path, True, f"Lỗi không xác định: {str(e)}"
 
-def _run_vton_pipeline_v2(in_path, garments, results_dir, out_path, static_folder_path):
+def call_texel_moda_api(person_path, garment_path, category, sex="female"):
+    """Tích hợp Texel Moda API (RapidAPI) sử dụng endpoint /try-on-file."""
+    import os
+    import requests
+    import uuid
+    import time
+
+    start_time = time.time()
+    # Lấy Key từ .env
+    api_key = os.getenv("RAPIDAPI_KEY", "32093762d1msh9ca635f1ef2bc5fp101cabjsn0418c3adbe9d")
+    url = "https://try-on-diffusion.p.rapidapi.com/try-on-file"
+    
+    print(f"[TEXEL-MODA] Đang gọi Texel Moda RapidAPI cho file: {os.path.basename(garment_path)}")
+    try:
+        with open(person_path, 'rb') as f_person:
+            person_bytes = f_person.read()
+        with open(garment_path, 'rb') as f_garment:
+            garment_bytes = f_garment.read()
+            
+        files = {
+            'avatar_image': ('avatar.png', person_bytes, 'image/png'),
+            'clothing_image': ('garment.png', garment_bytes, 'image/png'),
+        }
+        
+        # Texel Moda yêu cầu giới tính (avatar_sex)
+        # category có thể giúp phán đoán nếu cần, nhưng mặc định là female
+        payload = {
+            'avatar_sex': sex
+        }
+        
+        headers = {
+            "x-rapidapi-key": api_key,
+            "x-rapidapi-host": "try-on-diffusion.p.rapidapi.com"
+        }
+        
+        # Gọi API với timeout 120s
+        response = requests.post(url, files=files, data=payload, headers=headers, timeout=120)
+        duration = time.time() - start_time
+        print(f"[TEXEL-MODA] API phản hồi sau {duration:.1f}s | Status: {response.status_code}")
+        
+        if response.status_code != 200:
+            err_msg = response.text[:500]
+            print(f"[TEXEL-MODA] ❌ Lỗi API (HTTP {response.status_code}): {err_msg}")
+            # Nếu lỗi quota hoặc key, báo về frontend
+            return person_path, True, f'Texel Moda Error ({response.status_code}): {err_msg}'
+            
+        # Lưu kết quả
+        ext = os.path.splitext(person_path)[1] or ".png"
+        out_name = f"texel_{uuid.uuid4().hex}{ext}"
+        out_path = os.path.join(os.path.dirname(person_path), out_name)
+        
+        # Kết quả trả về là binary ảnh JPEG/PNG
+        with open(out_path, "wb") as f:
+            f.write(response.content)
+            
+        print(f"[TEXEL-MODA] ✅ Thành công! Đã lưu ảnh: {out_path}")
+        return out_path, False, None
+        
+    except requests.exceptions.Timeout:
+        return person_path, True, 'Texel Moda Timeout - API quá lâu không phản hồi.'
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[TEXEL-MODA] ❌ Lỗi ngoại lệ: {str(e)}")
+        return person_path, True, f"Texel Moda Exception: {str(e)}"
+
+def _run_vton_pipeline_v2(in_path, garments, results_dir, out_path, static_folder_path, gender="female"):
     import time
     t_start = time.time()
     
@@ -2975,7 +3041,18 @@ def _run_vton_pipeline_v2(in_path, garments, results_dir, out_path, static_folde
             
         if g_abs and os.path.exists(g_abs):
             try:
-                res_path, fb, err = call_my_vton_api(person_path, g_abs, category=fashn_cat, garment_photo_type=photo_type)
+                # LỰA CHỌN PROVIDER TỪ .ENV
+                provider = os.getenv("VTON_PROVIDER", "colab").lower()
+                
+                if provider == "texel":
+                    # Sử dụng Texel Moda API (RapidAPI)
+                    # Chuyển đổi giới tính: male/female
+                    sex = "male" if "male" in gender.lower() or "nam" in gender.lower() else "female"
+                    res_path, fb, err = call_texel_moda_api(person_path, g_abs, category=fashn_cat, sex=sex)
+                else:
+                    # Mặc định sử dụng Colab AI (FASHN VTON 1.5)
+                    res_path, fb, err = call_my_vton_api(person_path, g_abs, category=fashn_cat, garment_photo_type=photo_type)
+                
                 if not fb:
                     person_path = res_path
                     final_path = res_path
@@ -3101,6 +3178,10 @@ def virtual_tryon_api():
         photo = request.files.get('photo')
         person_id = request.form.get('person_id')
         garments_json = request.form.get('garments')
+        gender = request.form.get('gender', 'female')
+        
+        # Nhận ảnh sản phẩm trực tiếp từ Blob nếu có
+        garment_blobs = request.files.getlist('garment_blobs')
         
         if not photo and not person_id:
             return jsonify({'success': False, 'message': 'photo OR person_id is required'}), 400
@@ -3120,6 +3201,19 @@ def virtual_tryon_api():
         os.makedirs(upload_dir, exist_ok=True)
         os.makedirs(results_dir, exist_ok=True)
 
+        # Xử lý các ảnh garment blobs được gửi lên (nếu có)
+        # Chúng ta sẽ khớp blob với garment dựa trên thứ tự hoặc id nếu cần,
+        # nhưng ở đây đơn giản là lưu chúng lại và cập nhật đường dẫn local.
+        if garment_blobs:
+            for i, blob in enumerate(garment_blobs):
+                if i < len(garments):
+                    ext = os.path.splitext(blob.filename)[1].lower() or '.png'
+                    blob_name = f"garment_blob_{uuid.uuid4().hex}{ext}"
+                    blob_path = os.path.join(upload_dir, blob_name)
+                    blob.save(blob_path)
+                    # Gán đường dẫn tuyệt đối để processor sử dụng trực tiếp
+                    garments[i]['clean_image_path'] = blob_path 
+
         if person_id:
             # Sử dụng ảnh đã có trên server
             in_path = os.path.join(upload_dir, person_id)
@@ -3128,7 +3222,7 @@ def virtual_tryon_api():
         else:
             # Tải lên ảnh mới
             ext = os.path.splitext(photo.filename)[1].lower() or '.jpg'
-            in_name = f"{uuid.uuid4().hex}{ext}"
+            in_name = f"person_{uuid.uuid4().hex}{ext}"
             in_path = os.path.join(upload_dir, in_name)
             photo.save(in_path)
 
@@ -3137,7 +3231,7 @@ def virtual_tryon_api():
 
         task_id = vton_processor_queue.add_task(
             _run_vton_pipeline_v2,
-            in_path, garments, results_dir, out_path, current_app.static_folder
+            in_path, garments, results_dir, out_path, current_app.static_folder, gender
         )
 
         return jsonify({

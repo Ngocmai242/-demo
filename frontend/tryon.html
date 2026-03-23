@@ -451,7 +451,11 @@
     <div id="toast" class="toast"></div>
 
     <script>
-        const API_BASE = "http://localhost:8080";
+        // Tự động xác định API_BASE dựa trên URL hiện tại, 
+        // hoặc fallback về localhost:8080 nếu chạy file HTML trực tiếp.
+        const API_BASE = (window.location.protocol.startsWith('http')) 
+            ? window.location.origin 
+            : "http://127.0.0.1:8080";
         let selectedFile = null;
         let currentPersonId = null; // Trạng thái ảnh người mẫu trên server (Phase 1)
         let isUploadingPerson = false;
@@ -502,7 +506,7 @@
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Không thể kết nối với server để lưu ảnh người.', 'error');
+                showToast('Lỗi kết nối Server! Vui lòng đảm bảo bạn đã chạy "python backend/run.py" và đang truy cập qua http://127.0.0.1:8080/tryon.html', 'error');
             } finally {
                 isUploadingPerson = false;
             }
@@ -563,7 +567,7 @@
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Lỗi kết nối máy chủ API.', 'error');
+                showToast('Lỗi kết nối Server! Vui lòng đảm bảo bạn đã chạy "python backend/run.py" và đang truy cập qua http://127.0.0.1:8080/tryon.html', 'error');
                 runBtn.disabled = false;
                 loading.style.display = 'none';
             }
@@ -637,13 +641,13 @@
                 
                 if (isUploadingPerson) {
                     showToast('Vui lòng đợi ảnh người mẫu tải lên xong...', 'error');
-                    runBtn.disabled = false; // Re-enable if upload is still in progress
+                    if (runBtn) runBtn.disabled = false;
                     return;
                 }
 
                 loading.style.display = 'flex';
                 loadingTitle.innerHTML = '✨ AI Đang May Đo...';
-                statusText.textContent = "Đang lấy ảnh đã lưu trên Server... Kết nối GPU Colab (Có thể mất 2-5 phút).";
+                statusText.textContent = "Đang chuẩn bị dữ liệu gửi tới GPU Colab... (Có thể mất 2-5 phút).";
 
                 const formData = new FormData();
                 if (currentPersonId) {
@@ -651,7 +655,28 @@
                 } else {
                     formData.append('photo', selectedFile); // Fallback nếu upload Phase 1 lỗi
                 }
-                formData.append('garments', JSON.stringify(garments)); // Serialize mảng garments
+                // Lấy giới tính từ Vibes hiện tại để AI Texel Moda xử lý chuẩn xác
+                const gender = document.getElementById('gender') ? document.getElementById('gender').value : 'female';
+                formData.append('gender', gender);
+                
+                // Gửi thông tin garments dưới dạng JSON
+                formData.append('garments', JSON.stringify(garments));
+
+                // KIỂM TRA VÀ GỬI BLOB NẾU CÓ (Hỗ trợ Workflow ảnh sản phẩm trực tiếp)
+                // Duyệt qua danh sách garments để xem có ảnh nào cần fetch thành blob không
+                // Lưu ý: Trong workflow hiện tại, chúng ta fetch từ URL nếu không có blob sẵn.
+                for (const item of garments) {
+                    if (item.image_url && item.image_url.startsWith('http')) {
+                        try {
+                            const imgRes = await fetch(item.image_url);
+                            const blob = await imgRes.blob();
+                            // Append blob vào trường 'garment_blobs' (backend sẽ nhận danh sách này)
+                            formData.append('garment_blobs', blob, `garment_${Date.now()}.png`);
+                        } catch (e) {
+                            console.warn("Không thể fetch blob cho garment:", item.name);
+                        }
+                    }
+                }
 
                 const response = await fetch(`${API_BASE}/api/virtual-tryon`, {
                     method: 'POST',
@@ -669,7 +694,7 @@
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Lỗi kết nối máy chủ AI VTON.', 'error');
+                showToast('Lỗi kết nối Server! Vui lòng đảm bảo bạn đã chạy "python backend/run.py" và đang truy cập qua http://127.0.0.1:8080/tryon.html', 'error');
                 loading.style.display = 'none';
                 if (runBtn) runBtn.disabled = false;
             }
