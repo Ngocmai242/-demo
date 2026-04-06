@@ -299,7 +299,7 @@
     <nav class="navbar">
         <a href="/" class="logo">Aurafit</a>
         <div class="nav-links">
-            <a href="/">Trang chủ</a>
+            <a href="/">Home</a>
             <a href="tryon.html" style="color: var(--rose); font-weight: 700;">✨ Virtual Try-On</a>
         </div>
     </nav>
@@ -309,7 +309,7 @@
             Virtual Try-On &amp; Smart Styling
         </h1>
         <p style="color: var(--muted); margin-bottom: 1.2rem;">
-            Upload ảnh của bạn, chọn vibes, rồi để AI phối đồ và gợi ý outfit phù hợp.
+            Upload your photo, choose your vibes, and let AI style you with matching outfit recommendations.
         </p>
     </div>
 
@@ -319,13 +319,13 @@
             <div class="card">
                 <div class="step-title">
                     <i class="fas fa-camera"></i>
-                    <h3>Bước 1: Tải ảnh của bạn</h3>
+                    <h3>Step 1: Upload Your Photo</h3>
                 </div>
                 
                 <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
                     <i class="fas fa-cloud-upload-alt"></i>
-                    <p>Nhấn để chọn ảnh hoặc kéo thả vào đây</p>
-                    <small>JPG, PNG hoặc WEBP (Tối đa 10MB)</small>
+                    <p>Click to select an image or drag and drop here</p>
+                    <small>JPG, PNG or WEBP (Max 10MB)</small>
                 </div>
 
                 <div id="preview-container">
@@ -339,76 +339,75 @@
             <div class="card">
                 <div class="step-title">
                     <i class="fas fa-magic"></i>
-                    <h3>Bước 2: Chọn Vibes</h3>
+                    <h3>Step 2: Choose Your Vibes</h3>
                 </div>
 
                 <div class="form-grid">
                     <div class="form-group">
-                        <label>Giới tính</label>
+                        <label>Gender</label>
                         <select id="gender">
-                            <option value="female">Nữ</option>
-                            <option value="male">Nam</option>
+                            <option value="female">Female</option>
+                            <option value="male">Male</option>
                             <option value="unisex">Unisex</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Dịp sử dụng</label>
+                        <label>Occasion</label>
                         <select id="occasion">
-                            <option value="casual">Thường ngày</option>
-                            <option value="work">Công sở</option>
-                            <option value="party">Tiệc sự kiện</option>
-                            <option value="date">Hẹn hò</option>
-                            <option value="sport">Thể thao</option>
-                            <option value="beach">Du lịch biển</option>
+                            <option value="casual">Casual</option>
+                            <option value="work">Work/Office</option>
+                            <option value="party">Party/Event</option>
+                            <option value="date">Date Night</option>
+                            <option value="sport">Sportswear</option>
+                            <option value="beach">Beach/Travel</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Phong cách</label>
+                        <label>Style</label>
                         <select id="style">
-                            <option value="any">Bất kỳ</option>
+                            <option value="any">Any Style</option>
                             <option value="minimalist">Minimalist</option>
                             <option value="streetwear">Streetwear</option>
                             <option value="korean">Korean Style</option>
                             <option value="boho">Boho</option>
-                            <option value="classic">Classic lịch sự</option>
+                            <option value="classic">Classic/Elegant</option>
                             <option value="y2k">Y2K</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Dáng người</label>
+                        <label>Body Shape</label>
                         <select id="body_shape">
-                            <option value="hourglass">Đồng hồ cát</option>
-                            <option value="inverted_triangle">Tam giác ngược</option>
-                            <option value="pear">Quả lê</option>
-                            <option value="apple">Quả táo</option>
-                            <option value="rectangle">Chữ nhật</option>
+                            <option value="hourglass">Hourglass</option>
+                            <option value="inverted_triangle">Inverted Triangle</option>
+                            <option value="pear">Pear Shape</option>
+                            <option value="apple">Apple Shape</option>
+                            <option value="rectangle">Rectangle</option>
                         </select>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label>Loại đồ muốn thử</label>
+                    <label>Category to Try</label>
                     <select id="outfit_type">
-                        <option value="top">Áo</option>
-                        <option value="bottom">Quần / Chân váy</option>
-                        <option value="dress">Váy liền / Đầm</option>
-                        <option value="top_bottom">Full Outfit (Áo + Quần)</option>
+                        <option value="top">Tops</option>
+                        <option value="bottom">Bottoms</option>
+                        <option value="dress">Dresses & One-pieces</option>
                     </select>
                 </div>
 
                 <div class="form-group">
-                    <label>Ngân sách</label>
+                    <label>Budget</label>
                     <select id="budget">
-                        <option value="any">Không giới hạn</option>
-                        <option value="under200">Dưới 200k</option>
+                        <option value="any">Unlimited</option>
+                        <option value="under200">Under 200k</option>
                         <option value="200-500">200k - 500k</option>
                         <option value="500-1000">500k - 1tr</option>
-                        <option value="above1000">Trên 1tr</option>
+                        <option value="above1000">Above 1tr</option>
                     </select>
                 </div>
 
                 <button class="magic-btn" id="run-btn" onclick="fetchRecommendations()">
-                    <i class="fas fa-search"></i> TÌM OUTFIT PHÙ HỢP
+                    <i class="fas fa-search"></i> FIND MATCHING OUTFITS
                 </button>
             </div>
         </div>
@@ -418,7 +417,7 @@
             <div class="card result-empty" id="result-empty">
                 <i class="fas fa-wand-magic-sparkles"></i>
                 <h2>AI STYLING BOARD</h2>
-                <p>Kết quả thay đồ ảo và gợi ý phối đồ sẽ xuất hiện tại đây sau khi bạn nhấn nút Magic.</p>
+                <p>Virtual try-on results and outfit recommendations will appear here after you click the Magic button.</p>
             </div>
 
             <div class="result-filled" id="result-filled">
@@ -431,7 +430,7 @@
                 </div>
 
                 <p style="text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
-                    🛍️ Nhấn vào outfit bên dưới để mua trên Shopee
+                    🛍️ Click an outfit below to buy on Shopee
                 </p>
 
                 <h3 class="recommend-title"><i class="fas fa-shopping-bag"></i> Recommended Outfits</h3>
@@ -444,18 +443,16 @@
 
     <div id="loading-overlay">
         <div class="spinner"></div>
-        <h2 id="loading-title">✨ AI đang thay đồ cho bạn...</h2>
-        <p id="loading-status">Quá trình này có thể mất 30-60 giây. Vui lòng không tắt trang.</p>
+        <h2 id="loading-title">✨ AI is dressing you...</h2>
+        <p id="loading-status">This process may take 30-60 seconds. Please do not close the page.</p>
     </div>
 
     <div id="toast" class="toast"></div>
 
+    <script src="config.js"></script>
     <script>
-        // Tự động xác định API_BASE dựa trên URL hiện tại, 
-        // hoặc fallback về localhost:8080 nếu chạy file HTML trực tiếp.
-        const API_BASE = (window.location.protocol.startsWith('http')) 
-            ? window.location.origin 
-            : "http://127.0.0.1:8080";
+        // Tự động xác định API_BASE dựa trên window.APP_CONFIG
+        const API_BASE = window.APP_CONFIG ? window.APP_CONFIG.getBackendUrl() : "http://127.0.0.1:8080";
         let selectedFile = null;
         let currentPersonId = null; // Trạng thái ảnh người mẫu trên server (Phase 1)
         let isUploadingPerson = false;
@@ -468,7 +465,7 @@
             if (input.files && input.files[0]) {
                 const file = input.files[0];
                 if (file.size > 10 * 1024 * 1024) {
-                    showToast('File quá lớn! Vui lòng chọn ảnh dưới 10MB.', 'error');
+                    showToast('File is too large! Please choose an image under 10MB.', 'error');
                     return;
                 }
                 selectedFile = file;
@@ -480,14 +477,14 @@
                 }
                 reader.readAsDataURL(file);
 
-                // --- Giai đoạn 1: Tự động upload ảnh người mẫu khi vừa chọn xong ---
+                // --- Phase 1: Automatically upload person photo after selection ---
                 await uploadPerson(file);
             }
         }
 
         async function uploadPerson(file) {
             isUploadingPerson = true;
-            showToast('Đang tải ảnh người mẫu lên server...', 'success');
+            showToast('Uploading your photo to server...', 'success');
             
             const formData = new FormData();
             formData.append('photo', file);
@@ -500,13 +497,13 @@
                 const data = await res.json();
                 if (data.success) {
                     currentPersonId = data.person_id;
-                    showToast('Đã lưu ảnh người mẫu vào bộ nhớ server.', 'success');
+                    showToast('Photo saved to server memory.', 'success');
                 } else {
-                    showToast('Lỗi lưu ảnh người mẫu: ' + data.message, 'error');
+                    showToast('Failed to save photo: ' + data.message, 'error');
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Lỗi kết nối Server! Vui lòng đảm bảo bạn đã chạy "python backend/run.py" và đang truy cập qua http://127.0.0.1:8080/tryon.html', 'error');
+                showToast('Server Connection Error! Please make sure the backend is running.', 'error');
             } finally {
                 isUploadingPerson = false;
             }
@@ -523,7 +520,7 @@
 
         async function fetchRecommendations() {
             if (!selectedFile) {
-                showToast('Vui lòng tải ảnh người lên trước!', 'error');
+                showToast('Please upload your photo first!', 'error');
                 return;
             }
 
@@ -535,8 +532,8 @@
             try {
                 runBtn.disabled = true;
                 loading.style.display = 'flex';
-                loadingTitle.innerHTML = '<i class="fas fa-search"></i> Đang tìm kiếm tủ đồ...';
-                statusText.textContent = "Hệ thống đang quét các sản phẩm Normalized phù hợp nhất...";
+                loadingTitle.innerHTML = '<i class="fas fa-search"></i> Searching for outfits...';
+                statusText.textContent = "Scanning the best normalized products for you...";
 
                 const formData = new FormData();
                 formData.append('gender', document.getElementById('gender').value);
@@ -558,16 +555,16 @@
 
                 if (data.success) {
                     if(!data.results || data.results.length === 0){
-                        showToast('Không tìm thấy đồ phù hợp. Hãy thử thay đổi Ngân sách/Dáng người.', 'error');
+                        showToast('No matching outfits found. Try changing the Budget/Body Shape.', 'error');
                     } else {
                         showRecommendations(data.results, data.outfit_type);
                     }
                 } else {
-                    showToast(data.message || 'Lỗi lấy gợi ý', 'error');
+                    showToast(data.message || 'Error fetching recommendations', 'error');
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Lỗi kết nối Server! Vui lòng đảm bảo bạn đã chạy "python backend/run.py" và đang truy cập qua http://127.0.0.1:8080/tryon.html', 'error');
+                showToast('Server Connection Error!', 'error');
                 runBtn.disabled = false;
                 loading.style.display = 'none';
             }
@@ -584,7 +581,7 @@
             const container = document.getElementById('outfit-cards');
             container.innerHTML = '';
             
-            document.querySelector('.recommend-title').innerHTML = `<i class="fas fa-check-circle"></i> Vui lòng chọn 1 thẻ để "Thử lên người"`;
+            document.querySelector('.recommend-title').innerHTML = `<i class="fas fa-check-circle"></i> Please select 1 card to "Try it on"`;
             
             results.forEach((res, index) => {
                 const card = document.createElement('div');
@@ -604,7 +601,7 @@
                         <div class="outfit-info">
                             <div class="name">${item.name}</div>
                             <div class="price">${formatPrice(item.price)}</div>
-                            <div class="shopee-tag">✨ BẤM ĐỂ THỬ</div>
+                            <div class="shopee-tag">✨ CLICK TO TRY</div>
                         </div>
                     `;
                 } else {
@@ -616,9 +613,9 @@
                             <img src="${bot.image_url}" style="width:50%; object-fit:cover;" title="${bot.name}">
                         </div>
                         <div class="outfit-info">
-                            <div class="name"><b>Set kết hợp:</b> ${top.name.substring(0, 15)}... + Quần/Váy</div>
-                            <div class="price">COMBO Đôi</div>
-                            <div class="shopee-tag" style="background-color:#E91E63;">✨ THỬ CẢ BỘ</div>
+                            <div class="name"><b>Combo Set:</b> ${top.name.substring(0, 15)}... + Bottom</div>
+                            <div class="price">COMBO Pair</div>
+                            <div class="shopee-tag" style="background-color:#E91E63;">✨ TRY FULL SET</div>
                         </div>
                     `;
                 }
@@ -626,7 +623,7 @@
             });
 
             document.getElementById('result-filled').scrollIntoView({ behavior: 'smooth' });
-            showToast('Đã lọc ra đồ phù hợp. Vui lòng bấm vào 1 thẻ bài!', 'success');
+            showToast('Matching outfits filtered. Please click a card!', 'success');
         }
 
         async function runTryOnPhase2(garments) {
@@ -640,14 +637,14 @@
                 if (runBtn) runBtn.disabled = true;
                 
                 if (isUploadingPerson) {
-                    showToast('Vui lòng đợi ảnh người mẫu tải lên xong...', 'error');
+                    showToast('Please wait for photo upload to complete...', 'error');
                     if (runBtn) runBtn.disabled = false;
                     return;
                 }
 
                 loading.style.display = 'flex';
-                loadingTitle.innerHTML = '✨ AI Đang May Đo...';
-                statusText.textContent = "Đang chuẩn bị dữ liệu gửi tới GPU Colab... (Có thể mất 2-5 phút).";
+                loadingTitle.innerHTML = '✨ AI is Customizing...';
+                statusText.textContent = "Preparing data for GPU... (May take 2-5 minutes).";
 
                 const formData = new FormData();
                 if (currentPersonId) {
@@ -688,13 +685,13 @@
                 if (data.success && data.task_id) {
                     pollTaskStatus(data.task_id);
                 } else {
-                    showToast(data.message || 'Có lỗi xảy ra khi bắt đầu Try-On', 'error');
+                    showToast(data.message || 'Error occurred starting Try-On', 'error');
                     loading.style.display = 'none';
                     if (runBtn) runBtn.disabled = false;
                 }
             } catch (err) {
                 console.error(err);
-                showToast('Lỗi kết nối Server! Vui lòng đảm bảo bạn đã chạy "python backend/run.py" và đang truy cập qua http://127.0.0.1:8080/tryon.html', 'error');
+                showToast('Server Connection Error!', 'error');
                 loading.style.display = 'none';
                 if (runBtn) runBtn.disabled = false;
             }
@@ -712,7 +709,7 @@
                 attempts++;
                 if (attempts > maxAttempts) {
                     clearInterval(interval);
-                    showToast('Yêu cầu hết thời gian chờ (Timeout). AI có thể đang bận.', 'error');
+                    showToast('Request timeout. AI might be busy.', 'error');
                     loading.style.display = 'none';
                     if (runBtn) runBtn.disabled = false;
                     return;
@@ -726,24 +723,24 @@
                         clearInterval(interval);
                         showFinalResult(data);
                         if (data.is_fallback) {
-                            showToast('Lỗi Try-On: ' + (data.error_message || 'Đang dùng ảnh gốc'), 'error');
+                            showToast('Try-On Error: ' + (data.error_message || 'Using original image'), 'error');
                         } else {
-                            showToast('Thành công! Đã thay đồ xong.', 'success');
+                            showToast('Success! Dressing completed.', 'success');
                         }
                         loading.style.display = 'none';
                         if (runBtn) runBtn.disabled = false;
                     } else if (data.status === 'failed') {
                         clearInterval(interval);
-                        showToast(data.message || 'AI xử lý thất bại.', 'error');
+                        showToast('AI Failure: ' + (data.message || 'Processing error'), 'error');
                         loading.style.display = 'none';
                         if (runBtn) runBtn.disabled = false;
                     } else {
-                        // Cập nhật thông báo trạng thái sinh động hơn
-                        if (attempts < 10) statusText.textContent = "Đang khởi tạo pipeline trên GPU...";
-                        else if (attempts < 40) statusText.textContent = "Đang phân tích đặc điểm cơ thể (30%)...";
-                        else if (attempts < 80) statusText.textContent = "Đang tiến hành khử nhiễu (Denoising) - Vui lòng đợi...";
-                        else if (attempts < 120) statusText.textContent = "Đang tinh chỉnh chi tiết vải vóc (80%)...";
-                        else statusText.textContent = "Đang hoàn tất và chuẩn bị gửi ảnh về (95%)...";
+                        // Dynamic status updates for pending items
+                        if (attempts < 10) statusText.textContent = "Initializing pipeline on GPU...";
+                        else if (attempts < 40) statusText.textContent = "Analyzing body features (30%)...";
+                        else if (attempts < 80) statusText.textContent = "Denoising process in progress - Please wait...";
+                        else if (attempts < 120) statusText.textContent = "Refining garment details (80%)...";
+                        else statusText.textContent = "Finishing and preparing result (95%)...";
                     }
                 } catch (err) {
                     console.error("Polling error:", err);
@@ -757,7 +754,7 @@
             
             const banner = document.getElementById('triedOutfitBanner');
             if (data.tried_items && data.tried_items.length > 0) {
-                let html = "<div style='margin-bottom: 12px; font-weight: bold; font-size: 1.1rem; color: var(--indigo); border-bottom: 2px solid var(--rose-light); padding-bottom: 8px;'>🛒 MUA OUTFIT BẠN ĐANG MẶC TRÊN ẢNH:</div>";
+                let html = "<div style='margin-bottom: 12px; font-weight: bold; font-size: 1.1rem; color: var(--indigo); border-bottom: 2px solid var(--rose-light); padding-bottom: 8px;'>🛒 BUY OUTFIT SHOWN ON IMAGE:</div>";
                 data.tried_items.forEach(t => {
                     html += `
                         <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);'>
@@ -768,7 +765,7 @@
                                     <div style="color: var(--rose); font-weight: 700; font-size: 0.85rem;">${formatPrice(t.price)}</div>
                                 </div>
                             </div>
-                            <a href="${t.url}" target="_blank" style="background: var(--rose); color: white; font-weight: bold; text-decoration: none; padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">MUA TRÊN SHOPEE</a>
+                            <a href="${t.url}" target="_blank" style="background: var(--rose); color: white; font-weight: bold; text-decoration: none; padding: 8px 18px; border-radius: 8px; font-size: 0.85rem; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">BUY ON SHOPEE</a>
                         </div>
                     `;
                 });
@@ -787,7 +784,7 @@
             if (url && url !== '#' && url.startsWith('http')) {
                 window.open(url, '_blank', 'noopener');
             } else {
-                showToast('Sản phẩm này chưa có link Shopee.', 'error');
+                showToast('This product does not have a Shopee link.', 'error');
             }
         }
 
@@ -807,9 +804,17 @@
 
         // Navbar submenu actions (from index.html dropdown)
         (function initNavAction() {
+            const sh = (getParam('shape') || '').toLowerCase();
+            if (sh && document.getElementById('body_shape')) {
+                document.getElementById('body_shape').value = sh;
+            }
+            const gd = (getParam('gender') || '').toLowerCase();
+            if (gd && document.getElementById('gender')) {
+                document.getElementById('gender').value = gd;
+            }
             const gt = (getParam('garment_type') || '').toLowerCase();
-            if (gt && document.getElementById('garment_type')) {
-                document.getElementById('garment_type').value = gt;
+            if (gt && document.getElementById('outfit_type')) {
+                document.getElementById('outfit_type').value = gt;
             }
             const action = (getParam('action') || '').toLowerCase();
             if (action === 'upload') {

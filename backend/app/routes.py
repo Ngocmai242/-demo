@@ -2812,14 +2812,25 @@ def _resolve_clean_abs(clean_rel, static_folder_path):
     if not clean_rel: return None
     try:
         rel = str(clean_rel).lstrip("/").replace("\\", "/")
-        if not rel.startswith("static"):
-            abs_path = os.path.abspath(os.path.join(static_folder_path, rel))
-        else:
-            rel_clean = rel.replace("static/", "", 1)
-            abs_path = os.path.abspath(os.path.join(static_folder_path, rel_clean))
-        if os.path.exists(abs_path): return abs_path
+        
+        # Test 1: Truc tiep file neu la absolute
         if os.path.exists(clean_rel): return clean_rel
-    except: pass
+        
+        # Test 2: combine voi static_folder_path
+        p1 = os.path.abspath(os.path.join(static_folder_path, rel))
+        if os.path.exists(p1): return p1
+        
+        # Test 3: thu them 'static' de de phong static_folder chi tro ve frontend/
+        p2 = os.path.abspath(os.path.join(static_folder_path, "static", rel))
+        if os.path.exists(p2): return p2
+        
+        # Test 4: neu path da co 'static', thu bo di de phong loop static/static
+        if rel.startswith("static"):
+            p3 = os.path.abspath(os.path.join(static_folder_path, rel.replace("static/", "", 1)))
+            if os.path.exists(p3): return p3
+
+    except Exception:
+        pass
     return None
 
 def call_my_vton_api(person_path, garment_path, category, garment_photo_type="model"):
@@ -2950,7 +2961,7 @@ def call_texel_moda_api(person_path, garment_path, category, sex="female"):
 
     start_time = time.time()
     # Lấy Key từ .env
-    api_key = os.getenv("RAPIDAPI_KEY", "32093762d1msh9ca635f1ef2bc5fp101cabjsn0418c3adbe9d")
+    api_key = os.getenv("RAPIDAPI_KEY", "41bc05ce03msh67626f796ce6555p1c4872jsn5c4fa2d8cedd")
     # ĐÂY LÀ ENDPOINT ĐÃ TEST THÀNH CÔNG 100%
     url = "https://try-on-diffusion.p.rapidapi.com/try-on-file"
     
@@ -2984,8 +2995,9 @@ def call_texel_moda_api(person_path, garment_path, category, sex="female"):
         
         if response.status_code != 200:
             err_msg = response.text[:500]
-            print(f"[TEXEL-MODA] ❌ Lỗi API (HTTP {response.status_code}): {err_msg}")
-            return person_path, True, f'Texel Moda Error ({response.status_code}): {err_msg}'
+            err_msg_full = f"Texel Moda Error HTTP {response.status_code}: {err_msg}"
+            print(f"[TEXEL-MODA] ❌ {err_msg_full}")
+            raise Exception(err_msg_full)
             
         # Kết quả Texel Moda /try-on-file trả về trực tiếp binary ảnh
         # Giải mã và lưu kết quả
@@ -3000,12 +3012,85 @@ def call_texel_moda_api(person_path, garment_path, category, sex="female"):
         return out_path, False, None
         
     except requests.exceptions.Timeout:
-        return person_path, True, 'Texel Moda Timeout - API quá lâu không phản hồi.'
+        err_msg = 'Texel Moda Timeout - API quá lâu không phản hồi.'
+        print(f"[TEXEL-MODA] ❌ {err_msg}")
     except Exception as e:
         import traceback
         traceback.print_exc()
         print(f"[TEXEL-MODA] ❌ Lỗi ngoại lệ: {str(e)}")
-        return person_path, True, f"Texel Moda Exception: {str(e)}"
+        err_msg = str(e)
+
+    # NẾU CÓ LỖI: Trả về một ảnh chứa chữ lỗi để User thấy rõ trên màn hình thay vì gỡ lỗi ngầm
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        img = Image.open(person_path).convert("RGBA")
+        draw = ImageDraw.Draw(img)
+        text = f"RAPID API ERROR:\n{err_msg}\nvui long Subscribe tren RapidAPI!"
+        draw.rectangle(((50, 50), (450, 150)), fill="red")
+        draw.text((60, 60), text, fill="white")
+        
+        ext = os.path.splitext(person_path)[1] or ".png"
+        out_name = f"error_texel_{uuid.uuid4().hex}{ext}"
+        out_path = os.path.join(os.path.dirname(person_path), out_name)
+        img.save(out_path)
+        return out_path, True, f"Texel Moda Error: {err_msg}" # Return True for fallback flag so 'tried_items' isn't populated, preventing the fake Shopee cart from rendering when an API error occurred.
+    except Exception as e_pil:
+        print(f"[TEXEL-MODA] ❌ Lỗi vẽ PIL fallback: {e_pil}")
+        import traceback
+        traceback.print_exc()
+        return person_path, True, f"Texel Moda Exception: {err_msg}"
+
+
+def _prepare_garment_for_ai(g_abs, save_dir):
+    """
+    Chuẩn hóa ảnh áo quần nghiêm ngặt trước khi gửi lên AI API:
+    - Xóa phông (nếu chưa xóa)
+    - Scale & Pad (không kéo giãn) về kích thước chuẩn ví dụ 768x1024, nền trong suốt.
+    """
+    import os, uuid
+    try:
+        from PIL import Image
+        img = Image.open(g_abs).convert("RGBA")
+        
+        # 1. Tự động kiểm tra và xóa nền
+        # (Nếu ảnh có rất ít pixel trong suốt, nghi ngờ là chưa xóa nền)
+        alpha = img.split()[3]
+        transparent_pixels = sum(1 for p in alpha.getdata() if p < 255)
+        total_pixels = img.width * img.height
+        if transparent_pixels / total_pixels < 0.05:
+            # Gần như không có pixel trong suốt -> Tự động xóa nền
+            print(f"[Garment Prep] Ảnh chưa xóa nền, đang Auto-Rembg...")
+            with open(g_abs, "rb") as f:
+                clean_bytes, _ = remove_background_rgba(f.read())
+            if clean_bytes:
+                import io
+                img = Image.open(io.BytesIO(clean_bytes)).convert("RGBA")
+        
+        # 2. Smart Padding (Resize without stretching) to 768x1024
+        TARGET_W, TARGET_H = 768, 1024
+        ratio = min(TARGET_W / img.width, TARGET_H / img.height)
+        new_w = int(img.width * ratio * 0.95) # Dành lề 5%
+        new_h = int(img.height * ratio * 0.95)
+        
+        img_resized = img.resize((new_w, new_h), Image.LANCZOS)
+        
+        # Đặt vào giữa một Canvas trong suốt 768x1024
+        final_img = Image.new("RGBA", (TARGET_W, TARGET_H), (0, 0, 0, 0))
+        offset_x = (TARGET_W - new_w) // 2
+        offset_y = (TARGET_H - new_h) // 2
+        final_img.paste(img_resized, (offset_x, offset_y), img_resized)
+        
+        out_name = f"ai_ready_{uuid.uuid4().hex}.png"
+        out_path = os.path.join(save_dir, out_name)
+        
+        # Ép Lưu định dạng PNG chuẩn AI
+        final_img.save(out_path, format="PNG")
+        print(f"[Garment Prep] Đã xử lý chuẩn AI (768x1024, PNG Alpha) -> {out_path}")
+        return out_path
+    except Exception as e:
+        print(f"[Garment Prep] Lỗi chuẩn hóa ảnh: {e}")
+        return g_abs # Fallback về ảnh gốc nếu lỗi
+
 
 def _run_vton_pipeline_v2(in_path, garments, results_dir, out_path, static_folder_path, gender="female"):
     import time
@@ -3018,6 +3103,7 @@ def _run_vton_pipeline_v2(in_path, garments, results_dir, out_path, static_folde
     tried_items = []
     last_error_msg = None
     
+    print(f"[TRYON] Processing {len(garments)} garments...")
     for g in garments:
         garment_img_url = g.get('image_url')
         clean_path_rel = g.get('clean_image_path')
@@ -3039,37 +3125,60 @@ def _run_vton_pipeline_v2(in_path, garments, results_dir, out_path, static_folde
         if not g_abs:
             g_abs = download_garment_image(garment_img_url, shopee_url, save_dir=os.path.join(static_folder_path, 'uploads', 'tryon'))
             
+        print(f"[TRYON] Resolved garment path: {g_abs}")
         if g_abs and os.path.exists(g_abs):
+            
+            # CHUẨN HÓA BẮT BUỘC TRƯỚC KHI GỬI AI
+            g_abs = _prepare_garment_for_ai(g_abs, os.path.join(static_folder_path, 'uploads', 'tryon'))
+            
             try:
-                # LỰA CHỌN PROVIDER TỪ .ENV
-                provider = os.getenv("VTON_PROVIDER", "colab").lower()
+                # 1. First attempt: Primary Provider (usually Colab or Local Server)
+                print(f"[TRYON] Attempt 1: Calling Primary VTON API...")
+                res_path, fb, err = call_my_vton_api(person_path, g_abs, category=fashn_cat, garment_photo_type=photo_type)
                 
-                if provider == "texel":
-                    # Sử dụng Texel Moda API (RapidAPI)
-                    # Chuyển đổi giới tính: male/female
+                # 2. SEAMLESS FALLBACK: If Primary fails, call RapidAPI (Texel Moda) automatically
+                if fb:
+                    print(f"[TRYON] ⚠️ Primary API failed ({err}). Falling back to RapidAPI (Texel Moda)...")
                     sex = "male" if "male" in gender.lower() or "nam" in gender.lower() else "female"
                     res_path, fb, err = call_texel_moda_api(person_path, g_abs, category=fashn_cat, sex=sex)
-                else:
-                    # Mặc định sử dụng Colab AI (FASHN VTON 1.5)
-                    res_path, fb, err = call_my_vton_api(person_path, g_abs, category=fashn_cat, garment_photo_type=photo_type)
+                    
+                    if not fb:
+                        print("[TRYON] ✅ Fallback succeeded! Continuing with Texel Moda output.")
+                    else:
+                        print(f"[TRYON] ❌ Both APIs failed for {name}.")
+                
+                # ALWAYS update person_path and final_path so any visual fallback image (error or otherwise) is propagated to the final copied output.
+                person_path = res_path
+                final_path = res_path
                 
                 if not fb:
-                    person_path = res_path
-                    final_path = res_path
                     tried_items.append({"name": name, "url": shopee_url, "image_url": garment_img_url, "price": g.get("price")})
                 else:
-                    # Capture the first error if we don't have one yet
                     if not last_error_msg:
                         last_error_msg = err
 
             except Exception as e:
                 err_str = f"[{type(e).__name__}] {e}"
                 last_error_msg = err_str
-                import traceback
-                traceback.print_exc()
-                with open("c:/Mai/4/fashn_debug_err.txt", "a", encoding="utf-8") as ferr:
-                    ferr.write(f"\\n--- ERROR FOR {name} ---\\n{traceback.format_exc()}\\n")
                 print(f"[TRYON] ⚠️ Lỗi khi gọi VTON cho {name}: {err_str}")
+        else:
+            print(f"[TRYON] ❌ Lỗi: Không thể tìm thấy hoặc tải ảnh sản phẩm {name}")
+            last_error_msg = f"Lỗi tải ảnh: Không thể lấy ảnh sản phẩm từ Shopee hoặc Database (URL bị lỗi hoặc bị chặn chặn Bot)."
+            
+            # Ghi đè lỗi trực tiếp lên ảnh để user thấy
+            try:
+                from PIL import Image, ImageDraw, ImageFont
+                img = Image.open(person_path).convert("RGBA")
+                draw = ImageDraw.Draw(img)
+                draw.rectangle(((50, 350), (450, 450)), fill="orange")
+                draw.text((60, 360), f"KHONG THE TAI ANH SAN PHAM:\n{name}", fill="white")
+                ext = os.path.splitext(person_path)[1] or ".png"
+                out_name = f"error_garment_{uuid.uuid4().hex}{ext}"
+                err_path = os.path.join(os.path.dirname(person_path), out_name)
+                img.save(err_path)
+                final_path = err_path
+            except Exception as epil:
+                print(f"[TRYON] Lỗi ghi PIL: {epil}")
                 
     import shutil
     shutil.copyfile(final_path, out_path)
@@ -3099,7 +3208,7 @@ def recommend_products_api():
             body_shape=request.form.get('body_shape') or req_json.get('body_shape') or '',
             budget=request.form.get('budget') or req_json.get('budget') or 'any',
             garment_type=garment_type,
-            limit=50,
+            limit=8,
             require_clean=True
         )
         
@@ -3173,6 +3282,7 @@ def upload_person_api():
 
 @main_bp.route('/api/virtual-tryon', methods=['POST'])
 def virtual_tryon_api():
+    print("[API] Virtual Try-On End-Point Hit!")
     import json
     try:
         photo = request.files.get('photo')

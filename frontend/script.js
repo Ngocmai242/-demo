@@ -1300,7 +1300,7 @@ function renderAdvancedBodyReport(stylist, analysis) {
         </div>
 
         <div style="margin-top:25px; display:flex; justify-content:center;">
-             <button class="btn btn-primary" onclick="scrollToSection('tryon')" style="width:auto; padding:12px 40px; font-weight:700; border-radius:30px; background:linear-gradient(135deg, var(--pastel-pink-dark), var(--pastel-blue-dark));">
+             <button class="btn btn-primary" onclick="window.location.href='tryon.html?shape=${shape.toLowerCase().replace(' ', '_')}&gender=${genderLabel.toLowerCase()}'" style="width:auto; padding:12px 40px; font-weight:700; border-radius:30px; background:linear-gradient(135deg, var(--pastel-pink-dark), var(--pastel-blue-dark));">
                 Try AI Outfits for my ${shape} Shape <i class="fas fa-arrow-right"></i>
             </button>
         </div>
